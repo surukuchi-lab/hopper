@@ -14,15 +14,16 @@ class AxialSolver:
     """
     Fast custom axial integrator based on the notebook's approach:
 
-      dz/dt = ± v_parallel(B(r0, z))
+        dz/dt = ± v_parallel(B(r0, z))
+        v_parallel(B) = v * sqrt(max(0, 1 - B/Bc))
 
-    with turning-point detection by checking B>Bc and reflecting.
+    Turning-point handling:
+      - If a step would enter B > Bc (forbidden), reduce dt by halving to bracket the turning point.
+      - Once a turning point is encountered, flip direction (mirror reflection).
 
     Key stability features (important at very high pitch angles):
-      - adaptive dt that shrinks when |v_parallel| is small
-      - turning-point handling that *never* lets dt shrink below dt_min
-        (the original notebook halves dt; here we clamp at dt_min to avoid
-        pathological tiny dt values that explode step count)
+      - adaptive dt shrink when |v_parallel| is small
+      - dt never shrinks below dt_min_s
     """
     field: FieldMap
     r0_m: float
@@ -34,49 +35,79 @@ class AxialSolver:
     safety: float = 0.9
     v_turn_threshold_c: float = 0.02  # fraction of c where we start shrinking dt
     max_steps: int = 5_000_000
-    
-    def __getattr__(self, name: str):
-    """
-    Compatibility aliases between legacy and new solver attributes.
 
-    - legacy: E0_eV
-    - new:    energy_eV
+    # Small tolerance so that tiny interpolation noise doesn't cause immediate "forbidden" classification.
+    mirror_arg_tol: float = 1.0e-12
 
-    __getattr__ is only called if normal attribute lookup fails, so this does not
-    interfere with dataclass field assignment (unlike @property).
-    """
-    d = self.__dict__
-    if name == "energy_eV" and "E0_eV" in d:
-        return float(d["E0_eV"])
-    if name == "E0_eV" and "energy_eV" in d:
-        return float(d["energy_eV"])
-    raise AttributeError(f"{type(self).__name__} object has no attribute {name!r}")
+    @property
+    def energy_eV(self) -> float:
+        # Backwards-compatible alias used by some callers.
+        return float(self.E0_eV)
 
     def integrate(
         self,
+        *,
         t0_s: float,
         duration_s: float,
         z0_m: float,
         vpar_sign: int = 1,
+        stop_at_turning: bool = False,
     ) -> Dict[str, np.ndarray]:
-        t_end = float(t0_s) + float(duration_s)
-        if duration_s <= 0:
-            return dict(t=np.asarray([t0_s], float), z=np.asarray([z0_m], float), vpar=np.asarray([0.0], float))
+        """
+        Integrate z(t) on a (generally) non-uniform time grid.
 
-        gamma, beta, v_tot = gamma_beta_v_from_kinetic(self.E0_eV)
-        v_tot = float(v_tot)
+        Returns a dict with standard keys expected by the dynamics subsystem:
+          - t_s
+          - z_m
+          - vpar_m_per_s
+
+        If stop_at_turning=True, the integrator stops immediately after the first turning point.
+        The dict also includes:
+          - hit_turning (bool)
+        """
+        t0 = float(t0_s)
+        dur = float(duration_s)
+        if dur <= 0.0:
+            return dict(
+                t_s=np.asarray([t0], float),
+                z_m=np.asarray([float(z0_m)], float),
+                vpar_m_per_s=np.asarray([0.0], float),
+                hit_turning=np.asarray([False]),
+            )
+
+        t_end = t0 + dur
+
+        gamma, _, v_tot = gamma_beta_v_from_kinetic(self.E0_eV)
+        v_tot = float(np.asarray(v_tot).reshape(()))
         c0 = 299_792_458.0
 
-        Bc = critical_B_from_mu(self.E0_eV, self.mu0_J_per_T)
-
-        t_list = [float(t0_s)]
-        z_list = [float(z0_m)]
-        vpar_list = []
+        Bc = float(critical_B_from_mu(self.E0_eV, self.mu0_J_per_T))
 
         sign = 1.0 if int(vpar_sign) >= 0 else -1.0
 
+        # Field map bounds (used only when clamp_to_grid=False).
         z_min = float(self.field.z[0])
         z_max = float(self.field.z[-1])
+
+        # Initial state.
+        z = float(z0_m)
+        B0 = float(self.field.B(self.r0_m, z))
+        arg0 = 1.0 - B0 / (Bc + 1e-300)
+
+        # If we're exactly at the mirror point (or numerically beyond), there is no meaningful bounce.
+        if arg0 <= 0.0 and abs(arg0) > self.mirror_arg_tol:
+            raise ValueError(
+                "Initial condition is already beyond the mirror condition (B0 > Bc). "
+                "This typically indicates an inconsistent (mu0, E0) pair or an extreme pitch angle."
+            )
+
+        vpar0 = sign * v_tot * float(np.sqrt(max(arg0, 0.0)))
+
+        t_list = [t0]
+        z_list = [z]
+        v_list = [vpar0]
+
+        hit_turning = False
 
         for _ in range(self.max_steps):
             t = t_list[-1]
@@ -86,15 +117,13 @@ class AxialSolver:
 
             B_here = float(self.field.B(self.r0_m, z))
             arg_now = 1.0 - B_here / (Bc + 1e-300)
+            arg_now = float(arg_now)
+
             if arg_now <= 0.0:
-                # If we ever land in the forbidden region, reflect direction and take a tiny step.
-                sign *= -1.0
+                # Numerical noise can put us slightly beyond Bc. Treat as at-turning.
                 vpar_abs = 0.0
             else:
                 vpar_abs = v_tot * float(np.sqrt(arg_now))
-
-            vpar = sign * vpar_abs
-            vpar_list.append(vpar)
 
             # adaptive dt near turning
             if vpar_abs < self.v_turn_threshold_c * c0:
@@ -106,38 +135,55 @@ class AxialSolver:
             dt = min(dt, t_end - t)
             dt = max(self.dt_min_s, dt)
 
-            # trial step
-            z_new = z + vpar * dt
-            B_new = float(self.field.B(self.r0_m, z_new))
-            arg_new = 1.0 - B_new / (Bc + 1e-300)
+            vpar = sign * vpar_abs
 
-            if arg_now > 0.0 and arg_new < 0.0:
-                # crossed into forbidden region; reduce dt but never below dt_min
+            # trial step
+            z_trial = z + vpar * dt
+            B_trial = float(self.field.B(self.r0_m, z_trial))
+            arg_trial = 1.0 - B_trial / (Bc + 1e-300)
+
+            if (arg_now > 0.0) and (arg_trial < -self.mirror_arg_tol):
+                # Crossed into forbidden region; bisect dt to bracket turning point.
                 n_halve = 0
-                while arg_new < 0.0 and dt > self.dt_min_s and n_halve < 64:
+                while arg_trial < -self.mirror_arg_tol and dt > self.dt_min_s and n_halve < 64:
                     dt = max(self.dt_min_s, 0.5 * dt)
-                    z_new = z + vpar * dt
-                    B_new = float(self.field.B(self.r0_m, z_new))
-                    arg_new = 1.0 - B_new / (Bc + 1e-300)
+                    z_trial = z + vpar * dt
+                    B_trial = float(self.field.B(self.r0_m, z_trial))
+                    arg_trial = 1.0 - B_trial / (Bc + 1e-300)
                     n_halve += 1
 
-                # if still slightly outside due to coarse map/interpolation, clamp z_new back
-                if arg_new < 0.0:
-                    z_new = z  # stay put; reflect and continue
-                sign *= -1.0
+            # Decide whether we hit/overstepped the turning point.
+            turning_step = (arg_now > 0.0) and (arg_trial <= self.mirror_arg_tol)
+
+            if turning_step:
+                hit_turning = True
+                # Keep the trial position if it's still valid; otherwise stay put.
+                if arg_trial < -self.mirror_arg_tol:
+                    z_new = z
+                else:
+                    z_new = float(z_trial)
+                v_new = 0.0
+                sign *= -1.0  # reflect after turning
+            else:
+                z_new = float(z_trial)
+                v_new = float(vpar)
 
             t_new = t + dt
 
             if (z_new < z_min or z_new > z_max) and not self.field.clamp_to_grid:
+                # Stop if we leave the map and clamping is disabled.
                 break
 
-            t_list.append(t_new)
-            z_list.append(z_new)
+            t_list.append(float(t_new))
+            z_list.append(float(z_new))
+            v_list.append(float(v_new))
 
-        # pad vpar to match length
-        if vpar_list:
-            vpar_arr = np.asarray(vpar_list + [vpar_list[-1]], float)
-        else:
-            vpar_arr = np.asarray([0.0], float)
+            if stop_at_turning and turning_step:
+                break
 
-        return dict(t=np.asarray(t_list, float), z=np.asarray(z_list, float), vpar=vpar_arr)
+        return dict(
+            t_s=np.asarray(t_list, float),
+            z_m=np.asarray(z_list, float),
+            vpar_m_per_s=np.asarray(v_list, float),
+            hit_turning=np.asarray([hit_turning]),
+        )

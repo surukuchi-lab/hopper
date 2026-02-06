@@ -8,7 +8,7 @@ import numpy as np
 from ..cavity.mode_map import ModeMap
 from ..cavity.resonance import ResonanceCurve
 from ..config import MainConfig
-from ..constants import E_CHARGE, M_E
+from ..constants import E_CHARGE
 from ..field.field_map import FieldMap
 from ..utils.math import cumulative_trapezoid, resample_linear, unwrap_angle
 from .axial_solver import AxialSolver
@@ -16,9 +16,7 @@ from .drifts import gradB_drift_vphi, integrate_phi_from_vphi
 from .kinematics import (
     cyclotron_frequency_hz,
     gamma_beta_v_from_kinetic,
-    larmor_power_W,
     larmor_power_W_array,
-    larmor_radius_m,
     larmor_radius_m_array,
     mu_from_pitch,
 )
@@ -113,39 +111,25 @@ def build_dynamic_track(
     B0 = float(field.B(float(r0_m), float(z0_m)))
     E0 = float(elec.energy_eV)
     theta = float(elec.pitch_angle_deg)
-    mu0 = mu_from_pitch(E0, theta, B0)
+    mu0 = float(mu_from_pitch(E0, theta, B0))
 
     # ------------------------------------------------------------
     # Axial track generation: direct integration OR template tiling
     # ------------------------------------------------------------
-    # Instantiate AxialSolver with new signature if available; fall back to legacy.
-    try:
-        solver = AxialSolver(
-            field=field,
-            r0_m=float(r0_m),
-            energy_eV=float(elec.energy_eV),
-            pitch_angle_deg=float(elec.pitch_angle_deg),
-            dt_max_s=float(dyn.dt_max_s),
-            dt_min_s=float(dyn.dt_min_s),
-            safety=float(dyn.safety),
-            v_turn_threshold_c=float(dyn.v_turn_threshold_c),
-        )
-    except TypeError:
-        solver = AxialSolver(
-            field=field,
-            r0_m=float(r0_m),
-            E0_eV=float(elec.energy_eV),
-            mu0_J_per_T=float(mu0),
-            dt_max_s=float(dyn.dt_max_s),
-            dt_min_s=float(dyn.dt_min_s),
-            safety=float(dyn.safety),
-            v_turn_threshold_c=float(dyn.v_turn_threshold_c),
-        )
+    solver = AxialSolver(
+        field=field,
+        r0_m=float(r0_m),
+        E0_eV=float(E0),
+        mu0_J_per_T=float(mu0),
+        dt_max_s=float(dyn.dt_max_s),
+        dt_min_s=float(dyn.dt_min_s),
+        safety=float(dyn.safety),
+        v_turn_threshold_c=float(dyn.v_turn_threshold_c),
+    )
 
     axial_strategy = str(getattr(dyn, "axial_strategy", "direct_integration"))
     energy_loss_model = str(getattr(dyn, "energy_loss_model", "none"))
 
-    # Always build a bounce template if we need energy-loss-per-bounce or tiling.
     need_template = (axial_strategy == "template_tiling") or (energy_loss_model != "none")
 
     if not need_template:
@@ -154,15 +138,16 @@ def build_dynamic_track(
             duration_s=Tdur,
             z0_m=float(z0_m),
             vpar_sign=int(elec.vpar_sign),
+            stop_at_turning=False,
         )
         t_s, z_m, vpar_m_per_s = _extract_axial_solution_arrays(sol)
-        E_eV = np.full_like(t_s, float(elec.energy_eV), dtype=float)
+        E_eV = np.full_like(t_s, float(E0), dtype=float)
     else:
         tpl = build_bounce_template(
             solver,
             z0_m=float(z0_m),
             vpar_sign0=int(elec.vpar_sign),
-            duration_hint_s=min(Tdur, 5e-5),
+            duration_hint_s=min(Tdur, float(getattr(dyn, "template_duration_hint_s", 5e-5))),
             max_duration_s=float(getattr(dyn, "template_max_duration_s", Tdur)),
             return_z_tol_m=float(getattr(dyn, "template_return_z_tol_m", 1e-6)),
             min_reflections=int(getattr(dyn, "template_min_reflections", 2)),
@@ -180,7 +165,7 @@ def build_dynamic_track(
                 t0_s=t0,
                 duration_s=Tdur,
             )
-            E_eV = np.full_like(t_s, float(elec.energy_eV), dtype=float)
+            E_eV = np.full_like(t_s, float(E0), dtype=float)
 
         elif energy_loss_model == "per_bounce":
             t_s, z_m, vpar_m_per_s, E_eV = build_tiled_axial_track_energy_per_bounce(
@@ -188,10 +173,10 @@ def build_dynamic_track(
                 field=field,
                 r0_m=float(r0_m),
                 z0_m=float(z0_m),
-                pitch_angle_deg=float(elec.pitch_angle_deg),
+                pitch_angle_deg=float(theta),
                 t0_s=t0,
                 duration_s=Tdur,
-                energy0_eV=float(elec.energy_eV),
+                energy0_eV=float(E0),
                 energy_floor_eV=float(getattr(dyn, "energy_floor_eV", 0.0)),
                 energy_loss_scale=float(getattr(dyn, "energy_loss_scale", 1.0)),
             )
@@ -202,26 +187,30 @@ def build_dynamic_track(
                 field=field,
                 r0_m=float(r0_m),
                 z0_m=float(z0_m),
-                pitch_angle_deg=float(elec.pitch_angle_deg),
-                energy0_eV=float(elec.energy_eV),
+                pitch_angle_deg=float(theta),
+                energy0_eV=float(E0),
                 energy_floor_eV=float(getattr(dyn, "energy_floor_eV", 0.0)),
                 energy_loss_scale=float(getattr(dyn, "energy_loss_scale", 1.0)),
                 n_bounces=int(getattr(dyn, "energy_loss_fit_bounces", 10)),
             )
-
             t_s, z_m, vpar_m_per_s = tile_bounce_template_constant_energy(
                 tpl,
                 t0_s=t0,
                 duration_s=Tdur,
             )
-            E_eV = float(elec.energy_eV) - float(loss_rate) * (t_s - t0)
+            E_eV = float(E0) - float(loss_rate) * (t_s - t0)
             E_eV = np.maximum(E_eV, float(getattr(dyn, "energy_floor_eV", 0.0)))
 
         else:
             raise ValueError(f"Unknown dynamics.energy_loss_model={energy_loss_model!r}")
 
+    t = np.asarray(t_s, dtype=float)
+    z = np.asarray(z_m, dtype=float)
+    vpar = np.asarray(vpar_m_per_s, dtype=float)
+    E_eV = np.asarray(E_eV, dtype=float)
+
     # ------------------------------------------------------------
-    # Optional: cyclotron-phase-based internal stepping (expensive)
+    # Optional: cyclotron-phase-based internal time-stepping (expensive)
     # ------------------------------------------------------------
     time_step_strategy = str(getattr(dyn, "time_step_strategy", "axial_adaptive"))
     samples_per_turn = getattr(dyn, "samples_per_cyclotron_turn", None)
@@ -231,15 +220,14 @@ def build_dynamic_track(
         if n_per <= 1:
             raise ValueError("samples_per_cyclotron_turn must be >= 2.")
 
-        # Use guiding-center B(r0, z) to define phase stepping.
-        B_gc_tmp = field.B(float(r0_m), np.asarray(z_m, dtype=float))
+        B_gc_tmp = field.B(float(r0_m), np.asarray(z, dtype=float))
         gamma_tmp = np.asarray(gamma_beta_v_from_kinetic(E_eV)[0], dtype=float)
-        fc_tmp = (E_CHARGE * B_gc_tmp) / (2.0 * np.pi * gamma_tmp * M_E)
+        fc_tmp = cyclotron_frequency_hz(B_gc_tmp, gamma_tmp, q_C=-E_CHARGE)
 
         # Cyclotron phase (monotone)
-        phi = np.zeros_like(t_s, dtype=float)
-        if len(t_s) >= 2:
-            dt = (t_s[1:] - t_s[:-1])
+        phi = np.zeros_like(t, dtype=float)
+        if len(t) >= 2:
+            dt = (t[1:] - t[:-1])
             phi[1:] = np.cumsum(2.0 * np.pi * 0.5 * (fc_tmp[1:] + fc_tmp[:-1]) * dt)
 
         dphi_max = (2.0 * np.pi) / float(n_per)
@@ -249,32 +237,32 @@ def build_dynamic_track(
             n_new = int(np.floor(phi_end / dphi_max)) + 1
             phi_u = dphi_max * np.arange(n_new, dtype=float)
 
-            t_new = np.interp(phi_u, phi, t_s)
-            z_new = np.interp(t_new, t_s, z_m)
-            v_new = np.interp(t_new, t_s, vpar_m_per_s)
+            t_new = np.interp(phi_u, phi, t)
+            z_new = np.interp(t_new, t, z)
+            v_new = np.interp(t_new, t, vpar)
 
-            idx = np.searchsorted(t_s, t_new, side="right") - 1
+            idx = np.searchsorted(t, t_new, side="right") - 1
             idx = np.clip(idx, 0, len(E_eV) - 1)
             E_new = E_eV[idx]
 
         elif time_step_strategy == "phase_bounded":
-            t_list = [float(t_s[0])]
-            z_list = [float(z_m[0])]
-            v_list = [float(vpar_m_per_s[0])]
+            t_list = [float(t[0])]
+            z_list = [float(z[0])]
+            v_list = [float(vpar[0])]
             E_list = [float(E_eV[0])]
 
-            for i in range(len(t_s) - 1):
+            for i in range(len(t) - 1):
                 dphi = float(phi[i + 1] - phi[i])
                 k = int(np.ceil(dphi / dphi_max))
                 k = max(1, k)
 
-                ti0, ti1 = float(t_s[i]), float(t_s[i + 1])
+                ti0, ti1 = float(t[i]), float(t[i + 1])
                 for j in range(1, k + 1):
                     frac = j / k
                     tj = ti0 + (ti1 - ti0) * frac
                     t_list.append(tj)
-                    z_list.append(float(z_m[i] + (z_m[i + 1] - z_m[i]) * frac))
-                    v_list.append(float(vpar_m_per_s[i] + (vpar_m_per_s[i + 1] - vpar_m_per_s[i]) * frac))
+                    z_list.append(float(z[i] + (z[i + 1] - z[i]) * frac))
+                    v_list.append(float(vpar[i] + (vpar[i + 1] - vpar[i]) * frac))
                     E_list.append(float(E_eV[i]))  # piecewise-constant by "previous"
 
             t_new = np.asarray(t_list, dtype=float)
@@ -293,13 +281,7 @@ def build_dynamic_track(
                 "Increase dynamics.max_internal_points only if you really intend this."
             )
 
-        t_s, z_m, vpar_m_per_s, E_eV = t_new, z_new, v_new, E_new
-
-    # Adopt names used by the rest of this function
-    t = np.asarray(t_s, dtype=float)
-    z = np.asarray(z_m, dtype=float)
-    vpar = np.asarray(vpar_m_per_s, dtype=float)
-    E_eV = np.asarray(E_eV, dtype=float)
+        t, z, vpar, E_eV = t_new, z_new, v_new, E_new
 
     # Guiding-center field along the axial track
     B_gc = field.B(float(r0_m), z)
@@ -333,33 +315,37 @@ def build_dynamic_track(
     # Energy-dependent gamma
     gamma = np.asarray(gamma_beta_v_from_kinetic(E_eV)[0], dtype=float)
 
-    # Cyclotron phase for the *orbit geometry* (use GC field for consistency & to avoid implicit coupling)
-    f_c_gc = cyclotron_frequency_hz(B_gc, gamma)
+    # ------------------------------------------------------------
+    # Cyclotron orbit + (optional) true-orbit fixed-point refinement
+    # ------------------------------------------------------------
     psi0 = float(elec.cyclotron_phase0_rad)
-    psi = cumulative_trapezoid(2.0 * np.pi * f_c_gc, t, initial=psi0)
+    n_fp = int(getattr(dyn, "true_orbit_fixed_point_iters", 1 if feat.include_true_orbit else 0))
+    n_fp = max(0, n_fp)
+
+    # Start from guiding-center frequency and B for geometry.
+    f_c_for_phase = cyclotron_frequency_hz(B_gc, gamma, q_C=-E_CHARGE)
+    psi = cumulative_trapezoid(2.0 * np.pi * f_c_for_phase, t, initial=psi0)
     psi = unwrap_angle(psi)
 
-    # Larmor radius
-    try:
-        rho = np.asarray(larmor_radius_m_array(mu0, gamma, B_gc, q_C=-E_CHARGE), dtype=float)
-    except TypeError:
-        B_arr = np.asarray(B_gc, dtype=float)
-        g_arr = np.asarray(gamma, dtype=float)
-        if g_arr.ndim == 0:
-            g_arr = np.full_like(B_arr, float(g_arr), dtype=float)
-        rho = np.array(
-            [larmor_radius_m(mu0, float(gi), float(Bi), q_C=-E_CHARGE) for gi, Bi in zip(g_arr, B_arr)],
-            dtype=float,
-        )
+    rho = larmor_radius_m_array(B_gc, E_eV, mu0, q_C=-E_CHARGE)
 
-    # True orbit around guiding center
     x = x_gc + rho * np.cos(psi)
     y = y_gc + rho * np.sin(psi)
+
+    # Fixed-point iterations: update B(r,z) -> f_c -> psi and rho -> x,y.
+    for _ in range(n_fp):
+        r_true = np.hypot(x, y)
+        B_orb = field.B(r_true, z)
+        f_c_for_phase = cyclotron_frequency_hz(B_orb, gamma, q_C=-E_CHARGE)
+        psi = cumulative_trapezoid(2.0 * np.pi * f_c_for_phase, t, initial=psi0)
+        psi = unwrap_angle(psi)
+        rho = larmor_radius_m_array(B_orb, E_eV, mu0, q_C=-E_CHARGE)
+        x = x_gc + rho * np.cos(psi)
+        y = y_gc + rho * np.sin(psi)
+
     z_true = z.copy()
 
-    # ------------------------------------------------------------
-    # Instantaneous |B| experienced by the electron (stored as B_T)
-    # ------------------------------------------------------------
+    # Instantaneous |B| and coupling evaluation path
     if feat.include_true_orbit:
         r_true = np.hypot(x, y)
         B_T = field.B(r_true, z_true)
@@ -368,17 +354,11 @@ def build_dynamic_track(
         B_T = B_gc
         r_for_coupling = np.full_like(t, float(r0_m), dtype=float)
 
-    # Use B_T for RF phase + envelope power proxy (consistent with "instantaneous |B|")
-    f_c = cyclotron_frequency_hz(B_T, gamma)
+    # Cyclotron frequency used for RF phase + IF synthesis
+    f_c = cyclotron_frequency_hz(B_T, gamma, q_C=-E_CHARGE)
 
-    try:
-        P_e = np.asarray(larmor_power_W_array(B_T, E_eV, mu0), dtype=float)
-    except TypeError:
-        B_arr = np.asarray(B_T, dtype=float)
-        E_arr = np.asarray(E_eV, dtype=float)
-        if E_arr.ndim == 0:
-            E_arr = np.full_like(B_arr, float(E_arr), dtype=float)
-        P_e = np.array([larmor_power_W(float(Bi), float(Ei), mu0) for Bi, Ei in zip(B_arr, E_arr)], dtype=float)
+    # Power proxy and mode coupling envelope (notebook-style Pin = P_e * s^2)
+    P_e = np.asarray(larmor_power_W_array(B_T, E_eV, mu0, q_C=-E_CHARGE), dtype=float)
 
     s_spatial = mode_map(r_for_coupling, z_true)
     Pin = P_e * (s_spatial ** 2)
@@ -398,8 +378,8 @@ def build_dynamic_track(
     phase_rf = cumulative_trapezoid(2.0 * np.pi * f_c, t, initial=0.0)
     phase_rf = unwrap_angle(phase_rf)
 
-    # Velocities (GC drift + cyclotron motion)
-    omega_c = 2.0 * np.pi * f_c_gc
+    # Velocities (GC drift + cyclotron motion). Use the phase-rate frequency used for psi.
+    omega_c = 2.0 * np.pi * f_c_for_phase
     vx_cyc = -rho * np.sin(psi) * omega_c
     vy_cyc = rho * np.cos(psi) * omega_c
 
