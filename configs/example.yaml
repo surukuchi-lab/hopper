@@ -54,14 +54,14 @@ dynamics:
   v_turn_threshold_c: 1e-5
 
   axial_strategy: template_tiling         # direct OR template_tiling
-  template_build: integrate               # integrate OR mirror
+  template_build: mirror               # integrate OR mirror
 
   energy_loss_model: linear_fit           # none OR per_bounce OR linear_fit
   energy_loss_scale: 1.0
   energy_floor_eV: 1000.0
   energy_loss_fit_bounces: 6
 
-  time_step_strategy: phase_uniform      # axial_adaptive OR phase_bounded OR phase_uniform
+  time_step_strategy: axial_adaptive      # axial_adaptive OR phase_bounded OR phase_uniform
   samples_per_cyclotron_turn: 15        # set integer to enable
   max_internal_points: 2000000
 

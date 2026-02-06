@@ -1,4 +1,4 @@
-# CRES Signal Sim
+# Hopper
 
 This package generates synthetic single-electron CRES tracks and complex IQ time series.
 
@@ -16,7 +16,7 @@ Key features:
 
 ## Install
 conda env create -f environment.yml
-conda activate cres-sim
+conda activate hopper
 pip install -e .
 
 ## Run
