@@ -3,27 +3,29 @@ simulation:
   track_length_s: 0.001
 
 electron:
+  position_reference: guiding_center   # guiding_center OR instantaneous
+  position_coordinates: cylindrical    # auto OR cylindrical OR cartesian
   energy_eV: 18563.251
   pitch_angle_deg: 89.0
   r0_m: 0.16
   phi0_rad: 0.0
   z0_m: 0.0
   vpar_sign: 1
-  cyclotron_phase0_rad: 0.0
+  cyclotron_phase0_rad: 0.0         # initial gyrophase; for guiding_center starts this selects the initial orbit point around the configured guiding center
 
 features:
   include_true_orbit: true
   include_gradB: true
-  include_resonance: false
-  write_root: false
+  include_curvature_drift: true
+  include_resonance: true
   amplitude_mode: sqrtP
   normalize_amp_at_t0: false
 
 trap:
-  field_map_npz: /gpfs/gibbs/project/heeger/ek787/Hopper/cres-signal-sim/resources/field_map_rz_components.npz
-  coil_xml: null
+  field_map_npz: ../resources/field_map_rz_components.npz
+  coil_xml: null                       # accepts absolute paths or paths relative to this config file
   generate_if_missing: false
-  placeholder_if_missing: true
+  placeholder_if_missing: false
   interpolation: bilinear
   clamp_to_grid: true
   grid:
@@ -43,7 +45,7 @@ mode_map:
   type: analytic_te011
 
 resonance:
-  root_file: /gpfs/gibbs/project/heeger/ek787/Hopper/cres-signal-sim/resources/UnitTestOutput.root
+  resonance_curve: ../resources/UnitTestOutput.root                # accepts absolute paths or paths relative to this config file
   object_name: cavityHisto
   normalize_to_peak: true
 
@@ -53,20 +55,22 @@ dynamics:
   safety: 0.98
   v_turn_threshold_c: 1e-5
 
-  axial_strategy: template_tiling         # direct OR template_tiling
-  template_build: mirror               # integrate OR mirror
+  axial_strategy: template_tiling      # direct OR template_tiling
+  template_build: mirror               # auto OR integrate OR mirror
 
-  energy_loss_model: linear_fit           # none OR per_bounce OR linear_fit
+  # Production default: accurate bouncewise radiative correction with evolving γ and µ.
+  # Use analytic for short validation windows only; it is intentionally more expensive.
+  energy_loss_model: per_bounce        # none OR per_bounce OR linear_fit OR analytic
   energy_loss_scale: 1.0
   energy_floor_eV: 1000.0
   energy_loss_fit_bounces: 6
 
-  time_step_strategy: axial_adaptive      # axial_adaptive OR phase_bounded OR phase_uniform
-  samples_per_cyclotron_turn: 15        # set integer to enable
-  max_internal_points: 2000000
+  # phase_uniform keeps exactly this many samples per cyclotron turn on the RF/root grid.
+  time_step_strategy: phase_uniform    # axial_adaptive OR phase_bounded OR phase_uniform
+  samples_per_cyclotron_turn: 15
 
 signal:
-  lo_hz: 563.e6
+  lo_hz: null
   fs_if_hz: 22e6
   if_decim: 1
   fs_hz: null
@@ -77,7 +81,9 @@ signal:
   normalize_power: false
 
 output:
-  out_dir: /gpfs/gibbs/project/heeger/ek787/Hopper/cres-signal-sim/outputs
-  basename: sim_001_89deg_18563_251eV_16cm
+  out_dir: outputs                  # relative to the working directory
+  basename: sim
   write_npz: true
   write_root: true
+  track_sampling: rf_sampled           # rf_sampled OR if_sampled
+  root_chunk_size: 200000

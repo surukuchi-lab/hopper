@@ -74,8 +74,8 @@ def load_loop_coils_from_xml(xml_path: str | Path) -> List[LoopCoil]:
     This parser is intentionally permissive: it walks all elements and tries to interpret any
     element that contains (radius, z, current) as a loop.
 
-    Because coil XML schemas vary between projects, you may need to adjust the key lists below
-    to match your specific trap .xml format.
+    Because coil XML schemas can vary between projects, may need to adjust the key lists below
+    to match the specific trap .xml format.
     """
     xml_path = Path(xml_path)
     if not xml_path.exists():

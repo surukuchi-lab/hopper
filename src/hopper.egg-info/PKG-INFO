@@ -1,5 +1,5 @@
 Metadata-Version: 2.4
-Name: cres-signal-sim
+Name: hopper
 Version: 0.1.0
 Summary: Synthetic CRES signal + track simulator (cyclotron + axial + grad-B drift)
 Author: E. Karim
@@ -14,7 +14,7 @@ Requires-Dist: h5py>=3.8
 Provides-Extra: root
 Requires-Dist: uproot>=5.0; extra == "root"
 
-# CRES Signal Sim
+# Hopper
 
 This package generates synthetic single-electron CRES tracks and complex IQ time series.
 
@@ -32,8 +32,8 @@ Key features:
 
 ## Install
 conda env create -f environment.yml
-conda activate cres-sim
+conda activate hopper
 pip install -e .
 
 ## Run
-cres-sim configs/example.yaml
+hopper-sim configs/example.yaml

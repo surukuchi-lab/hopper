@@ -16,11 +16,11 @@ class ResonanceNode:
         res_cfg = self.cfg.resonance
         feat = self.cfg.features
 
-        if not feat.include_resonance or res_cfg.root_file is None:
+        if not feat.include_resonance or res_cfg.resonance_curve is None:
             curve = ResonanceCurve.unity()
         else:
             curve = ResonanceCurve.from_root(
-                res_cfg.root_file,
+                res_cfg.resonance_curve,
                 object_name=res_cfg.object_name,
                 normalize_to_peak=res_cfg.normalize_to_peak,
             )

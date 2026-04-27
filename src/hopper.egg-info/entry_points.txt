@@ -1,2 +1,2 @@
 [console_scripts]
-cres-sim = cres_signal_sim.cli.run_sim:main
+hopper-sim = hopper.cli.run_sim:main

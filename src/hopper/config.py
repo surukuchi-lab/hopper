@@ -1,7 +1,7 @@
 """
 Configuration models + YAML loader.
 
-Naming requested in project spec:
+Naming requested in config:
 - starting_time_s == "starting time"
 - track_length_s  == "track length"
 """
@@ -15,6 +15,7 @@ import yaml
 
 InterpMethod = Literal["bilinear", "linear", "nearest", "cubic_spline"]
 AmplitudeMode = Literal["sqrtP", "P"]
+TrackSampling = Literal["rf_sampled", "if_sampled"]
 
 
 @dataclass
@@ -25,10 +26,10 @@ class SimulationConfig:
 
 @dataclass
 class FeatureConfig:
-    include_true_orbit: bool = False
+    include_true_orbit: bool = True
     include_gradB: bool = True
-    include_resonance: bool = False
-    write_root: bool = False
+    include_curvature_drift: bool = True
+    include_resonance: bool = True
     amplitude_mode: AmplitudeMode = "sqrtP"
     normalize_amp_at_t0: bool = False
 
@@ -68,13 +69,15 @@ class ModeMapConfig:
 
 @dataclass
 class ResonanceConfig:
-    root_file: Optional[str] = None
+    resonance_curve: Optional[str] = None
     object_name: Optional[str] = None
     normalize_to_peak: bool = True
 
 
 @dataclass
 class ElectronConfig:
+    position_reference: Literal["guiding_center", "instantaneous"] = "guiding_center"
+    position_coordinates: Literal["auto", "cylindrical", "cartesian"] = "auto"
     energy_eV: float = 18_563.251
     pitch_angle_deg: float = 89.0
     r0_m: float = 0.16
@@ -95,46 +98,45 @@ class DynamicsConfig:
     v_turn_threshold_c: float = 1e-5
 
     # Axial time evolution strategy
-    axial_strategy: Literal["direct", "template_tiling"] = "direct"
+    axial_strategy: Literal["direct", "template_tiling"] = "template_tiling"
 
     # How to build the single-bounce template (only used when axial_strategy=template_tiling)
-    template_build: Literal["integrate", "mirror"] = "integrate"
+    template_build: Literal["auto", "integrate", "mirror"] = "mirror"
 
     # Template detection controls (integrate build)
     template_return_z_tol_m: float = 1e-7
     template_max_duration_s: float = 5e-3
     template_min_reflections: int = 2
 
-    # Mirror-extension validity checks (mirror build)
-    mirror_require_z0_near_zero: bool = True
+    # Mirror-extension validity checks (mirror build). The mirror builder supports arbitrary starting z by phase-shifting a symmetric midplane-to-turning-point template.
     mirror_z0_tol_m: float = 1e-6
     mirror_symmetry_check: bool = True
     mirror_symmetry_rel_tol: float = 1e-3
     mirror_symmetry_ncheck: int = 25
 
-    # Energy loss / chirp model
-    # - "none": constant energy
-    # - "per_bounce": update energy once per axial bounce, and update tiling (period scaling) accordingly
-    # - "linear_fit": estimate linear loss rate from multiple bounces then apply E(t)=E0 - rate*t (simplified)
-    energy_loss_model: Literal["none", "per_bounce", "linear_fit"] = "none"
+    # Energy loss / chirp model.
+    # - "none": constant energy and constant µ
+    # - "per_bounce": integrate one full bounce at a time on the cached field line using the exact local radiation step; the mirror-template machinery is used only to seed the bounce-period guess, so the radiatively moving mirror remains self-consistent
+    # - "linear_fit": fast approximation; fit linear dE/dt and dµ/dt from several evolving-(γ, µ) bounces, then apply those rates on a tiled template
+    # - "analytic": continuously apply the exact local radiation step throughout the axial integration, evolving both γ and µ and therefore the reference pitch angle
+    energy_loss_model: Literal["none", "per_bounce", "linear_fit", "analytic"] = "per_bounce"
     energy_loss_scale: float = 1.0
     energy_floor_eV: float = 1.0
 
     # Used only when energy_loss_model="linear_fit"
     energy_loss_fit_bounces: int = 6
 
-    # Time-step strategy (internal dynamics grid)
-    # - "axial_adaptive": current behavior (axial solver dt control)
-    # - "phase_bounded": subdivide steps to cap cyclotron phase advance per step
-    # - "phase_uniform": resample to uniform cyclotron phase increments
+    # RF/output time-grid strategy.  The compact dynamics track is not expanded internally;
+    # phase-aware sampling is applied at the signal/ROOT-output boundary.
+    # - "axial_adaptive": use the configured uniform-time signal RF sampling rate
+    # - "phase_bounded": use a uniform-time RF grid fast enough to keep the maximum cyclotron phase advance <= 2π / samples_per_cyclotron_turn
+    # - "phase_uniform": sample at exactly uniform cyclotron phase increments Δφ = 2π / samples_per_cyclotron_turn; this time grid is generally non-uniform
     time_step_strategy: Literal["axial_adaptive", "phase_bounded", "phase_uniform"] = "axial_adaptive"
 
-    # If set, the target is <= 2π / samples_per_cyclotron_turn phase advance per step.
-    # WARNING: using the true cyclotron frequency here can create enormous arrays for GHz cyclotron motion.
+    # Target number of RF/output samples per cyclotron turn for phase_bounded/phase_uniform.
     samples_per_cyclotron_turn: Optional[int] = None
 
-    # Safety cap to prevent pathological memory use if someone sets samples_per_cyclotron_turn aggressively.
-    max_internal_points: int = 2_000_000
+
 
 @dataclass
 class SignalConfig:
@@ -149,12 +151,15 @@ class SignalConfig:
     normalize_power: bool = False
 
 
+
 @dataclass
 class OutputConfig:
     out_dir: str = "outputs"
     basename: str = "sim"
     write_npz: bool = True
-    write_root: bool = False
+    write_root: bool = True
+    track_sampling: TrackSampling = "rf_sampled"
+    root_chunk_size: int = 200_000
 
 
 @dataclass

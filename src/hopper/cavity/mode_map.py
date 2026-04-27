@@ -31,7 +31,7 @@ class ModeMap(Protocol):
 @dataclass(frozen=True)
 class AnalyticTE011ModeMap:
     """
-    Analytic magnitude-only coupling proxy used in the notebook:
+    Analytic magnitude-only coupling proxy:
 
       |J1(χ r/a)| * |cos(π z/L)|
 

@@ -11,9 +11,7 @@ import numpy as np
 class ResonanceCurve:
     """
     A simple 1D frequency response curve loaded from a ROOT file (via uproot).
-
     The curve is used as a multiplicative amplitude factor response(fc).
-
     If no ROOT file is provided or uproot is unavailable, response(fc)=1.
     """
     f_hz: Optional[np.ndarray] = None

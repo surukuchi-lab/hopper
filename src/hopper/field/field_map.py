@@ -14,7 +14,6 @@ from .generator import FieldGridSpec, generate_field_map_from_coil_xml, save_fie
 def _placeholder_field(r: np.ndarray, z: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Simple non-physical placeholder field used only when no map is available.
-    Mirrors the notebook's fallback structure.
     """
     rr = r[:, None]
     zz = z[None, :]
