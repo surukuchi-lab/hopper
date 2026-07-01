@@ -1,3 +1,12 @@
+"""
+Module: hopper.dynamics.axial_profile
+
+Developer: ehtkarim
+Date: April 29, 2026
+
+Builds field-line axial profiles, interpolation caches, and drift-support quantities along the trap.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -84,14 +93,15 @@ class AxialFieldProfile:
             br = float(np.asarray(Br).reshape(()))
             bz = float(np.asarray(Bz).reshape(()))
             bmag = float(np.asarray(field.B(float(rr), float(zz))).reshape(()))
-            # Keep the z-parameterized field-line integration well behaved even if the map has extremely small |Bz| at some distant point.
-            # This floor is many orders of magnitude below the field values in the production maps
+            # Keep the z-parameterized field-line integration well behaved even if the
+            # map has extremely small |Bz| at some distant point. This floor is many
+            # orders of magnitude below the field values in the production maps.
             bz_floor = max(1.0e-15, 1.0e-12 * max(abs(bmag), 1.0))
             if abs(bz) < bz_floor:
                 bz = np.copysign(bz_floor, bz if bz != 0.0 else 1.0)
             return br / bz
 
-        # Second-order predictor/corrector integration forward in z
+        # Second-order predictor/corrector integration forward in z.
         for i in range(i0, z.size - 1):
             dz = float(z[i + 1] - z[i])
             k1 = slope(float(r[i]), float(z[i]))
@@ -99,7 +109,7 @@ class AxialFieldProfile:
             k2 = slope(r_pred, float(z[i + 1]))
             r[i + 1] = float(np.clip(r[i] + 0.5 * (k1 + k2) * dz, r_min, r_max))
 
-        # Backward in z
+        # Backward in z.
         for i in range(i0, 0, -1):
             dz = float(z[i - 1] - z[i])
             k1 = slope(float(r[i]), float(z[i]))
@@ -116,14 +126,16 @@ class AxialFieldProfile:
         bphi_hat = np.asarray(Bphi, dtype=float) / B_safe
         bz_hat = np.asarray(Bz, dtype=float) / B_safe
 
-        # Cache the phi component of b × κ with κ = (b·∇)b
+        # Cache the phi component of b × κ with κ = (b·∇)b.
         #
         # Along the cached field line the magnetic geometry is stored as a function of z.
-        # Since dz/ds = b_z, the field-line derivative is:
+        # Since dz/ds = b_z, the field-line derivative is
         #
         #     d/ds = b_z d/dz.
         #
-        # The production maps are axisymmetric with Bphi ≈ 0, so evaluating the cylindrical components in a fixed local basis is sufficient and avoids recomputing curvature inside the compact solver / RF output loops.
+        # The production maps are axisymmetric with Bphi ≈ 0, so evaluating the
+        # cylindrical components in a fixed local basis is sufficient and avoids
+        # recomputing curvature inside the compact solver / RF output loops.
         db_vec_dz = np.stack(
             [
                 np.gradient(br_hat, z, edge_order=1),

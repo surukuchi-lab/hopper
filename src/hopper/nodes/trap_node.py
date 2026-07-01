@@ -1,3 +1,12 @@
+"""
+Module: hopper.nodes.trap_node
+
+Developer: ehtkarim
+Date: April 29, 2026
+
+Loads or generates trap magnetic-field maps and stores field metadata in the pipeline context.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -51,6 +60,17 @@ class TrapNode:
                     placeholder_if_missing=trap.placeholder_if_missing,
                     grid_if_placeholder=grid,
                 )
+
+        profiler = ctx.get("profiler")
+        if profiler is not None:
+            profiler.add_note(
+                "trap",
+                field_map_npz=str(npz_path),
+                interpolation=str(trap.interpolation),
+                clamp_to_grid=bool(trap.clamp_to_grid),
+                grid_shape=f"{field.r.size}x{field.z.size}",
+                has_components=bool(field.Br is not None and field.Bz is not None),
+            )
 
         ctx = dict(ctx)
         ctx["field"] = field

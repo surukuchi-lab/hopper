@@ -1,3 +1,12 @@
+"""
+Module: hopper.signal.sampling
+
+Developer: ehtkarim
+Date: April 29, 2026
+
+Defines sampling plans for compact, RF-sampled, and chunked output tracks.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -84,8 +93,10 @@ def rf_time_grid_spec(cfg: MainConfig, track: DynamicTrack) -> TimeGridSpec:
     Build the RF-output grid specification.
 
     - axial_adaptive: use the configured uniform-time RF sampling rate.
-    - phase_bounded: use a uniform-time RF grid fast enough that the maximum cyclotron phase advance per sample is <= 2π / samples_per_cyclotron_turn.
-    - phase_uniform: sample exactly every 2π / samples_per_cyclotron_turn in accumulated cyclotron phase. The resulting time grid is non-uniform.
+    - phase_bounded: use a uniform-time RF grid fast enough that the maximum
+      cyclotron phase advance per sample is <= 2π / samples_per_cyclotron_turn.
+    - phase_uniform: sample exactly every 2π / samples_per_cyclotron_turn in
+      accumulated cyclotron phase. The resulting time grid is non-uniform.
     """
     t0 = float(cfg.simulation.starting_time_s)
     duration = float(cfg.simulation.track_length_s)

@@ -1,3 +1,12 @@
+"""
+Module: hopper.dynamics.axial_solver
+
+Developer: ehtkarim
+Date: April 29, 2026
+
+Integrates adiabatic axial motion and provides continuous compact reference trajectories.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -5,6 +14,7 @@ from typing import Dict, Optional
 
 import numpy as np
 
+from .. import constants as const
 from ..field.field_map import FieldMap
 from .axial_profile import AxialFieldProfile
 from .kinematics import critical_B_from_mu, gamma_beta_v_from_kinetic
@@ -94,7 +104,7 @@ class AxialSolver:
 
         _, _, v_tot = gamma_beta_v_from_kinetic(self.E0_eV)
         v_tot = float(np.asarray(v_tot).reshape(()))
-        c0 = 299_792_458.0
+        c0 = const.C0
 
         Bc = float(critical_B_from_mu(self.E0_eV, self.mu0_J_per_T))
         sign = 1.0 if int(vpar_sign) >= 0 else -1.0

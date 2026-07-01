@@ -1,3 +1,12 @@
+"""
+Module: hopper.utils.interpolation
+
+Developer: ehtkarim
+Date: April 29, 2026
+
+Provides lightweight one-dimensional and two-dimensional interpolation helpers for field and signal grids.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

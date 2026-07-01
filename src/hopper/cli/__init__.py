@@ -1,8 +1,10 @@
 """
-Command-line interface package for hopper.
+Module: hopper.cli
 
-This module exists mainly so `hopper.cli` is a proper package and can be
-imported cleanly by entrypoints/tests.
+Developer: ehtkarim
+Date: April 29, 2026
+
+Marks the command-line interface package and defines public CLI package exports.
 """
 
 from __future__ import annotations

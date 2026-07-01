@@ -1,3 +1,12 @@
+"""
+Module: hopper.io.root_io
+
+Developer: ehtkarim
+Date: April 29, 2026
+
+Writes track arrays to ROOT files with optional chunked output through uproot.
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -39,7 +48,7 @@ def write_track_root_chunks(
     Stream a ROOT TTree from branch-array chunks.
 
     This is used for RF-sampled tracks, where phase_uniform may request many
-    samples per cyclotron turn. Only one chunk of branch arrays stays in
+    samples per cyclotron turn. Only one chunk of branch arrays is resident in
     memory at a time.
     """
     try:

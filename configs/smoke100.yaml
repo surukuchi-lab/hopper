@@ -1,0 +1,146 @@
+physics:
+  constants_preset: pdg_2022
+simulation:
+  starting_time_s: 0.0
+  track_length_s: 0.0001
+electron:
+  position_reference: guiding_center
+  position_coordinates: cylindrical
+  energy_eV: 18563.251
+  pitch_angle_deg: 89.0
+  r0_m: 0.16
+  phi0_rad: 0.0
+  z0_m: 0.0
+  vpar_sign: 1
+  cyclotron_phase0_rad: 0.0
+tracks: []
+campaign:
+  enabled: false
+  parameter_ranges: {}
+  slurm_partition: null
+  slurm_time: 01:00:00
+  slurm_cpus_per_task: 1
+  slurm_mem_per_cpu: null
+  max_jobs: null
+features:
+  include_true_orbit: true
+  include_gradB: true
+  include_curvature_drift: false
+  include_resonance: false
+  amplitude_mode: sqrtP
+  normalize_amp_at_t0: false
+trap:
+  field_map_npz: ../resources/field_map_rz_components.npz
+  coil_xml: null
+  generate_if_missing: false
+  placeholder_if_missing: false
+  interpolation: bilinear
+  clamp_to_grid: true
+  grid:
+    r_max_m: 0.327
+    z_min_m: -2.0
+    z_max_m: 2.0
+    n_r: 201
+    n_z: 801
+cavity:
+  radius_m: 0.327
+  length_m: 4.0
+  f0_hz: 560.3e6
+  Q: 500
+  response_model: time_evolution
+  output_coupling_fraction: 1.0
+  port_phase_rad: 0.0
+  initial_cavity_phase_rad: 0.0
+  extend_ringdown_s: null
+  excitation_enabled: true
+  ringup_enabled: true
+  back_reaction_enabled: true
+  stimulated_back_reaction: true
+  back_reaction_requires_vector_map: true
+  mode_volume_m3: null
+  source_power_scale: 1.0
+  back_reaction_scale: 1.0
+  initial_stored_energy_J: 0.0
+mode_map:
+  type: auto
+  vector_e_field_map: ../resources/TE011_onRes_Vector_E_FieldMap_radius327mm_length4000mm_f560p3MHz_Q500_coarse.fld
+  vector_component_basis: cartesian
+  vector_field_unit_scale: 1.0
+  vector_energy_normalization_J: 1.0
+  vector_gyro_quadrature_points: 16
+  vector_normalize_to_peak: true
+  vector_bounds_policy: error
+  vector_cache_enabled: true
+  vector_cache_path: null
+  vector_cache_rebuild: false
+  fallback_to_analytic: true
+resonance:
+  resonance_curve: null
+  object_name: cavityHisto
+  normalize_to_peak: true
+dynamics:
+  dt_max_s: 2e-9
+  dt_min_s: 1e-12
+  safety: 0.98
+  v_turn_threshold_c: 1e-5
+  axial_strategy: template_tiling
+  template_build: mirror
+  energy_loss_model: per_bounce
+  energy_loss_scale: 1.0
+  energy_floor_eV: 1000.0
+  per_bounce_block_bounces: 64
+  back_reaction_block_vectorized: true
+  back_reaction_block_max_rel_state_change: 0.005
+  compact_output_dt_s: null
+  compact_output_include_turning_points: true
+  energy_loss_fit_bounces: 6
+  cyclotron_frequency_reference: instantaneous
+  true_orbit_phase_iterations: 1
+  time_step_strategy: phase_uniform
+  samples_per_cyclotron_turn: 15
+signal:
+  lo_hz: null
+  fs_if_hz: 22e6
+  if_decim: 1
+  fs_hz: null
+  if_antialias_filter: true
+  if_filter_order: 8
+  if_filter_cutoff_ratio: 0.9
+  carrier_phase0_rad: 0.0
+  normalize_power: false
+  cavity_filter_grid: if
+  cavity_update: first_order_hold
+  require_analytic_baseband_drive: true
+  if_bandwidth_tolerance: 0.001
+readout:
+  model: locust_like_baseband
+  require_analytic_baseband_drive: true
+  fast_decimation_factor: 1
+  store_fast_iq: false
+  chunk_size: 2000000
+  lpf:
+    type: none
+    cutoff_ratio_of_final_nyquist: 0.85
+    n_windows: 80
+  noise:
+    enabled: false
+    noise_floor_psd_W_per_Hz: 7.0e-22
+    impedance_ohm: 50.0
+    seed: null
+  digitizer:
+    enabled: false
+    bit_depth: 8
+    data_type_size: 1
+    signed: false
+    v_range: 1.0
+    v_offset: 0.0
+    strict_range: true
+output:
+  out_dir: outputs_smoke100
+  basename: smoke100
+  write_npz: true
+  write_root: false
+  track_sampling: rf_sampled
+  root_chunk_size: 200000
+  write_log: true
+  log_file: null

@@ -1,3 +1,12 @@
+"""
+Module: hopper.dynamics.template
+
+Developer: ehtkarim
+Date: April 29, 2026
+
+Constructs single-bounce axial templates, including the mirror-quadrature clock used by fast dynamics.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -5,10 +14,15 @@ from typing import Literal, Optional, Tuple
 
 import numpy as np
 
+from .. import constants as const
 from .axial_solver import AxialSolver
-from .kinematics import gamma_beta_v_from_kinetic
+from .kinematics import (
+    beta_parallel2_from_B_gamma_mu,
+    critical_B_from_mu,
+    gamma_beta_v_from_kinetic,
+)
 
-TemplateBuildMethod = Literal["auto", "integrate", "mirror"]
+TemplateBuildMethod = Literal["auto", "integrate", "mirror", "mirror_quadrature"]
 
 
 @dataclass(frozen=True)
@@ -19,7 +33,8 @@ class BounceTemplate:
     For tiling, the template is constructed to start at (t=0, z=z0) with the specified initial
     v_par sign, and to end at the first return to z0 moving in the same direction.
 
-    In "mirror" mode, we integrate only a quarter bounce (center -> turning point) and assemble a full bounce via symmetry.
+    In "mirror" mode (the legacy mirror-template approach), we integrate only a quarter bounce
+    (center -> turning point) and assemble a full bounce via symmetry.
     """
     t_rel_s: np.ndarray
     z_m: np.ndarray
@@ -30,6 +45,12 @@ class BounceTemplate:
 
     z0_m: float
     vpar_sign0: int
+
+    method: str = "unknown"
+    z_turn_positive_m: float | None = None
+    theta_node_count: int | None = None
+    period_rel_error_estimate: float | None = None
+    symmetry_rel_error: float | None = None
 
     @property
     def bounce_period_s(self) -> float:
@@ -122,17 +143,208 @@ def _find_bounce_end_index(
     return None
 
 
+def _symmetry_rel_error_about_zero(
+    solver: AxialSolver,
+    z_samples_m: np.ndarray,
+) -> float:
+    z = np.asarray(z_samples_m, dtype=float)
+    if z.size == 0:
+        return 0.0
+    Bp = np.asarray(solver.B_at_z(z), dtype=float)
+    Bm = np.asarray(solver.B_at_z(-z), dtype=float)
+    denom = np.maximum(np.abs(Bp), 1e-30)
+    return float(np.max(np.abs(Bp - Bm) / denom))
+
+
 def _check_symmetry_about_zero(
     solver: AxialSolver,
     z_samples_m: np.ndarray,
     rel_tol: float,
 ) -> bool:
-    z = np.asarray(z_samples_m, dtype=float)
-    Bp = solver.B_at_z(z)
-    Bm = solver.B_at_z(-z)
-    denom = np.maximum(np.abs(Bp), 1e-30)
-    rel = np.max(np.abs(Bp - Bm) / denom)
-    return bool(rel <= float(rel_tol))
+    return bool(_symmetry_rel_error_about_zero(solver, z_samples_m) <= float(rel_tol))
+
+
+def _brentq_fallback(func, lo: float, hi: float, *, xtol: float = 1.0e-12, maxiter: int = 100) -> float:
+    f_lo = float(func(lo))
+    f_hi = float(func(hi))
+    if f_lo == 0.0:
+        return float(lo)
+    if f_hi == 0.0:
+        return float(hi)
+    if f_lo * f_hi > 0.0:
+        raise ValueError("Root is not bracketed.")
+    a = float(lo)
+    b = float(hi)
+    fa = f_lo
+    fb = f_hi
+    for _ in range(int(maxiter)):
+        c = 0.5 * (a + b)
+        fc = float(func(c))
+        if abs(fc) <= 1.0e-14 or abs(b - a) <= float(xtol):
+            return float(c)
+        if fa * fc <= 0.0:
+            b = c
+            fb = fc
+        else:
+            a = c
+            fa = fc
+    return float(0.5 * (a + b))
+
+
+def _find_positive_turning_point(
+    solver: AxialSolver,
+    *,
+    Bcrit_T: float,
+) -> float:
+    if not (float(solver.field.z[0]) <= 0.0 <= float(solver.field.z[-1])):
+        raise ValueError("mirror_quadrature requires the field-map z range to contain z=0.")
+    B_center = float(np.asarray(solver.B_at_z(0.0)).reshape(()))
+    if B_center >= float(Bcrit_T):
+        raise ValueError(
+            "The supplied (E, μ) mirrors at or below the trap center; no positive turning point exists."
+        )
+
+    z_grid = np.asarray(solver.field.z, dtype=float)
+    z_pos = z_grid[z_grid >= 0.0]
+    if z_pos.size == 0 or float(z_pos[0]) != 0.0:
+        z_pos = np.unique(np.concatenate([np.asarray([0.0], dtype=float), z_pos]))
+    vals = np.asarray(solver.B_at_z(z_pos), dtype=float) - float(Bcrit_T)
+    crossing = np.flatnonzero(vals >= 0.0)
+    if crossing.size == 0:
+        raise ValueError(
+            "Field line does not reach the mirror field Bcrit on the positive-z side. "
+            "Check pitch angle, energy, μ, or field-map extent."
+        )
+    idx = int(crossing[0])
+    if idx == 0:
+        return float(z_pos[0])
+    lo = float(z_pos[idx - 1])
+    hi = float(z_pos[idx])
+
+    def f(zz: float) -> float:
+        return float(np.asarray(solver.B_at_z(float(zz))).reshape(())) - float(Bcrit_T)
+
+    try:
+        from scipy.optimize import brentq  # type: ignore
+
+        return float(brentq(f, lo, hi, xtol=1.0e-13, rtol=1.0e-13, maxiter=100))
+    except Exception:
+        return _brentq_fallback(f, lo, hi, xtol=1.0e-13, maxiter=120)
+
+
+def _cumulative_trapezoid_y(x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    out = np.zeros_like(x, dtype=float)
+    if x.size > 1:
+        out[1:] = np.cumsum(0.5 * (y[:-1] + y[1:]) * np.diff(x))
+    return out
+
+
+def _odd_node_count(n: int) -> int:
+    n = max(3, int(n))
+    return n if n % 2 == 1 else n + 1
+
+
+def _build_center_to_positive_turn_quadrature(
+    solver: AxialSolver,
+    *,
+    min_theta_nodes: int,
+    max_theta_nodes: int,
+    max_period_rel_error: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, float | int]]:
+    """Build the center-to-positive-turn leg with a regularized mirror clock.
+
+    The quarter-period integral is evaluated using z = z_turn sin(theta), which
+    removes the square-root endpoint singularity in dt/dz at the mirror.  This
+    is a clock construction, not a new physical model: z(t) still satisfies the
+    same adiabatic field-line equation as AxialSolver.
+    """
+    energy = float(solver.energy_eV)
+    gamma, _, _ = gamma_beta_v_from_kinetic(energy)
+    gamma = float(np.asarray(gamma).reshape(()))
+    mu = float(solver.mu0_J_per_T)
+    Bcrit = float(critical_B_from_mu(energy, mu))
+    z_turn = _find_positive_turning_point(solver, Bcrit_T=Bcrit)
+    if z_turn <= 0.0:
+        raise ValueError("mirror_quadrature found a non-positive turning point.")
+
+    n_min = _odd_node_count(int(min_theta_nodes))
+    n_max = _odd_node_count(int(max_theta_nodes))
+    if n_min > n_max:
+        n_min = n_max
+    tol = max(float(max_period_rel_error), 1.0e-12)
+
+    prev_period: float | None = None
+    prev_t: np.ndarray | None = None
+    prev_z: np.ndarray | None = None
+    prev_v: np.ndarray | None = None
+    prev_rel = np.inf
+    n = n_min
+    while True:
+        theta = np.linspace(0.0, 0.5 * np.pi, int(n), dtype=float)
+        z = float(z_turn) * np.sin(theta)
+        B = np.asarray(solver.B_at_z(z), dtype=float)
+        beta2 = np.asarray(beta_parallel2_from_B_gamma_mu(B, gamma, mu), dtype=float)
+        # Small negative values at the polished endpoint are roundoff. Larger negatives
+        # would indicate a bad turn root or a non-monotonic mirror bracket.
+        if np.min(beta2[:-1]) < -1.0e-10:
+            raise RuntimeError("mirror_quadrature sampled a forbidden point before the turning point.")
+        beta2 = np.maximum(beta2, 0.0)
+        bz_over_B = np.abs(np.asarray(solver.bz_over_B_at_z(z), dtype=float))
+        vz = const.C0 * np.sqrt(beta2) * bz_over_B
+        cos_theta = np.cos(theta)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            dt_dtheta = float(z_turn) * cos_theta / vz
+        finite = np.isfinite(dt_dtheta)
+        if not np.all(finite):
+            good = np.flatnonzero(finite)
+            if good.size == 0:
+                raise RuntimeError("mirror_quadrature produced no finite time integrand samples.")
+            # The endpoint limit is finite after the sin(theta) substitution.  A last
+            # finite neighbor is a stable practical endpoint estimate on these maps.
+            dt_dtheta[~finite] = dt_dtheta[good[-1]]
+        if dt_dtheta[-1] == 0.0 and dt_dtheta.size > 1:
+            dt_dtheta[-1] = dt_dtheta[-2]
+        t = _cumulative_trapezoid_y(theta, dt_dtheta)
+        period = 4.0 * float(t[-1])
+
+        rel = np.inf if prev_period is None else abs(period - prev_period) / max(abs(period), 1.0e-300)
+        if prev_period is not None and (rel <= tol or n >= n_max):
+            if rel <= tol or prev_t is None:
+                t_q, z_q, v_q = t, z, vz
+                used_n = int(n)
+                used_rel = float(rel)
+                used_period = float(period)
+            else:
+                t_q, z_q, v_q = prev_t, prev_z, prev_v
+                used_n = int((n + 1) // 2)
+                used_rel = float(prev_rel)
+                used_period = float(prev_period)
+            break
+
+        prev_period = float(period)
+        prev_t, prev_z, prev_v = t, z, vz
+        prev_rel = float(rel)
+        n = min(n_max, _odd_node_count(2 * int(n) - 1))
+        if n == int(prev_t.size):
+            t_q, z_q, v_q = t, z, vz
+            used_n = int(n)
+            used_rel = float(rel)
+            used_period = float(period)
+            break
+
+    if t_q.size < 3 or not np.all(np.diff(t_q) > 0.0):
+        raise RuntimeError("mirror_quadrature produced an invalid center-to-turn time axis.")
+    v_q = np.asarray(v_q, dtype=float)
+    v_q[-1] = 0.0
+    diag = {
+        "z_turn_positive_m": float(z_turn),
+        "theta_node_count": int(used_n),
+        "period_rel_error_estimate": float(used_rel if np.isfinite(used_rel) else 0.0),
+        "bounce_period_s": float(used_period),
+    }
+    return np.asarray(t_q, dtype=float), np.asarray(z_q, dtype=float), v_q, diag
 
 
 def _build_full_bounce_from_center_to_positive_turn(
@@ -333,22 +545,32 @@ def build_bounce_template(
     mirror_symmetry_check: bool,
     mirror_symmetry_rel_tol: float,
     mirror_symmetry_ncheck: int,
+    mirror_quadrature_min_theta_nodes: int = 513,
+    mirror_quadrature_max_theta_nodes: int = 8193,
+    mirror_template_max_period_rel_error: float = 1.0e-3,
 ) -> BounceTemplate:
     """
     Build one full-bounce template.
 
-    - method="mirror" uses midplane symmetry: integrate one center -> +turn leg, mirror it
-      into a full periodic bounce, then phase-rotate that periodic template to the requested
-      arbitrary starting z and direction.
+    - method="mirror_quadrature" uses the regularized action/time-of-flight
+      integral z=z_turn sin(theta) to build a center-to-turn leg, mirrors it,
+      and phase-rotates it to the requested arbitrary starting z and direction.
+      This is the preferred symmetric-template mode.
+    - method="mirror" keeps the legacy time-marched center-to-turn builder for
+      regression only.
     - method="integrate" directly integrates until a detected full return to z0.
-    - method="auto" uses mirror when the cached field-line profile is symmetric enough.
+    - method="auto" uses mirror_quadrature when the cached field-line profile is
+      symmetric enough.
     """
     Eref = float(solver.energy_eV)
     _, _, vref = gamma_beta_v_from_kinetic(Eref)
 
     m = str(method).lower()
-    if m not in {"auto", "integrate", "mirror"}:
-        raise ValueError(f"Unknown template build method {method!r}. Expected 'auto', 'integrate', or 'mirror'.")
+    if m not in {"auto", "integrate", "mirror", "mirror_quadrature"}:
+        raise ValueError(
+            f"Unknown template build method {method!r}. "
+            "Expected 'auto', 'integrate', 'mirror', or 'mirror_quadrature'."
+        )
 
     if m == "auto":
         ok = True
@@ -356,9 +578,9 @@ def build_bounce_template(
             z_extent = min(float(np.max(np.abs(solver.field.z))), max(0.01, abs(float(z0_m)) + 0.01))
             ztest = np.linspace(0.0, z_extent, int(mirror_symmetry_ncheck))
             ok = _check_symmetry_about_zero(solver, ztest, float(mirror_symmetry_rel_tol))
-        m = "mirror" if ok else "integrate"
+        m = "mirror_quadrature" if ok else "integrate"
 
-    if m == "mirror":
+    if m in {"mirror", "mirror_quadrature"}:
         if not (float(solver.field.z[0]) <= 0.0 <= float(solver.field.z[-1])):
             raise ValueError("mirror template build requires the field-map z range to contain the symmetry plane z=0.")
         if mirror_symmetry_check:
@@ -374,6 +596,46 @@ def build_bounce_template(
         center_sign = 1 if bz_over_B_center >= 0.0 else -1
         bz_over_B_start = float(np.asarray(solver.bz_over_B_at_z(float(z0_m))).reshape(()))
         desired_zdot_sign = 1 if (float(vpar_sign0) * bz_over_B_start) >= 0.0 else -1
+
+        if m == "mirror_quadrature":
+            t_q, z_q, v_q, qdiag = _build_center_to_positive_turn_quadrature(
+                solver,
+                min_theta_nodes=int(mirror_quadrature_min_theta_nodes),
+                max_theta_nodes=int(mirror_quadrature_max_theta_nodes),
+                max_period_rel_error=float(mirror_template_max_period_rel_error),
+            )
+            t_full, z_full, v_full = _build_full_bounce_from_center_to_positive_turn(t_q, z_q, v_q)
+            z_extent_tpl = max(abs(float(np.min(z_full))), abs(float(np.max(z_full))))
+            symmetry_rel = 0.0
+            if mirror_symmetry_check:
+                zcheck = np.linspace(0.0, z_extent_tpl, int(mirror_symmetry_ncheck))
+                symmetry_rel = _symmetry_rel_error_about_zero(solver, zcheck)
+                if symmetry_rel > float(mirror_symmetry_rel_tol):
+                    raise ValueError(
+                        "mirror_quadrature requested, but field-line symmetry check failed over the bounce extent."
+                    )
+            t_tpl, z_tpl, v_tpl = _rotate_full_bounce_template(
+                t_full,
+                z_full,
+                v_full,
+                z0_m=float(z0_m),
+                desired_zdot_sign=int(desired_zdot_sign),
+                z_tol_m=max(float(return_z_tol_m), float(mirror_z0_tol_m)),
+            )
+            return BounceTemplate(
+                t_rel_s=t_tpl,
+                z_m=z_tpl,
+                vpar_ref_m_per_s=v_tpl,
+                energy_ref_eV=Eref,
+                v_ref_m_per_s=float(vref),
+                z0_m=float(z0_m),
+                vpar_sign0=int(1 if int(vpar_sign0) >= 0 else -1),
+                method="mirror_quadrature",
+                z_turn_positive_m=float(qdiag["z_turn_positive_m"]),
+                theta_node_count=int(qdiag["theta_node_count"]),
+                period_rel_error_estimate=float(qdiag["period_rel_error_estimate"]),
+                symmetry_rel_error=float(symmetry_rel),
+            )
 
         T = max(float(duration_hint_s), 10.0 * float(solver.dt_min_s))
         while T <= float(max_duration_s):
@@ -414,6 +676,11 @@ def build_bounce_template(
                     v_ref_m_per_s=float(vref),
                     z0_m=float(z0_m),
                     vpar_sign0=int(1 if int(vpar_sign0) >= 0 else -1),
+                    method="mirror",
+                    z_turn_positive_m=float(np.max(z_full)),
+                    theta_node_count=None,
+                    period_rel_error_estimate=None,
+                    symmetry_rel_error=float(_symmetry_rel_error_about_zero(solver, np.linspace(0.0, max(abs(float(np.min(z_full))), abs(float(np.max(z_full)))), int(mirror_symmetry_ncheck)))) if mirror_symmetry_check else 0.0,
                 )
 
             T *= 2.0
@@ -465,6 +732,7 @@ def build_bounce_template(
                 v_ref_m_per_s=float(vref),
                 z0_m=float(z0_m),
                 vpar_sign0=int(1 if int(vpar_sign0) >= 0 else -1),
+                method="integrate",
             )
 
         T *= 2.0

@@ -1,8 +1,17 @@
+"""
+Module: hopper.dynamics.drifts
+
+Developer: ehtkarim
+Date: April 29, 2026
+
+Computes grad-B and curvature-drift terms for guiding-center transverse motion.
+"""
+
 from __future__ import annotations
 
 import numpy as np
 
-from ..constants import M_E
+from .. import constants as const
 from ..utils.math import cumulative_trapezoid
 
 
@@ -20,14 +29,20 @@ def gradB_drift_vphi(
     """
     Compute the azimuthal grad-B drift velocity for an axisymmetric field.
 
-    This repo uses the adiabatic invariant convention
+    The repo uses the adiabatic invariant convention
 
-        μ = γ m_e v_perp^2 / (2 B)
+        μ = γ m_e v_perp^2 / (2 B).
 
     With this convention, the relativistic correction is already absorbed into μ,
-    so the guiding-center grad-B drift becomes,
+    so the guiding-center grad-B drift keeps the same form used in the original
+    guide and code architecture,
 
-        v_{∇B,φ} = μ / (q B^2) * (Bz dB/dr - Br dB/dz)
+        v_{∇B,φ} = μ / (q B^2) * (Bz dB/dr - Br dB/dz).
+
+    An earlier refactor divided this by an extra γ, which double-counted the
+    relativistic correction and systematically under-rotated the guiding center in
+    φ. The ``gamma`` keyword is retained only for signature compatibility; it is
+    intentionally ignored.
     """
     mu = np.asarray(mu_J_per_T, float)
     Bmag = np.asarray(Bmag_T, float)
@@ -41,6 +56,7 @@ def gradB_drift_vphi(
         Br = np.asarray(Br_T, float)
         Bz = np.asarray(Bz_T, float)
 
+    # ``gamma`` is intentionally unused here; see the docstring above.
     cross_phi = Bz * dBdr - Br * dBdz
     vphi = mu * cross_phi / (float(q_C) * (Bmag * Bmag + 1e-300))
     return np.asarray(vphi, dtype=float)
@@ -70,7 +86,7 @@ def curvature_drift_vphi(
     vpar = np.asarray(vpar_m_per_s, dtype=float)
     B = np.asarray(Bmag_T, dtype=float)
     b_cross_kappa_phi = np.asarray(b_cross_kappa_phi_per_m, dtype=float)
-    return np.asarray(g * M_E * vpar * vpar * b_cross_kappa_phi / (float(q_C) * (B + 1e-300)), dtype=float)
+    return np.asarray(g * const.M_E * vpar * vpar * b_cross_kappa_phi / (float(q_C) * (B + 1e-300)), dtype=float)
 
 
 def integrate_phi_from_vphi(

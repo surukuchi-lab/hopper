@@ -1,3 +1,12 @@
+"""
+Module: hopper.field.generator
+
+Developer: ehtkarim
+Date: April 29, 2026
+
+Generates axisymmetric magnetic-field grids from coil XML specifications and writes NPZ field maps.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

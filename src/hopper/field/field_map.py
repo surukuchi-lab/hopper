@@ -1,3 +1,12 @@
+"""
+Module: hopper.field.field_map
+
+Developer: ehtkarim
+Date: April 29, 2026
+
+Loads magnetic-field maps, builds interpolation objects, and exposes scalar and component field queries.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,6 +23,7 @@ from .generator import FieldGridSpec, generate_field_map_from_coil_xml, save_fie
 def _placeholder_field(r: np.ndarray, z: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Simple non-physical placeholder field used only when no map is available.
+    Uses a compact deterministic fallback structure for tests and examples.
     """
     rr = r[:, None]
     zz = z[None, :]
@@ -34,7 +44,7 @@ class FieldMap:
       - Br, Bphi, Bz (optional, if provided by NPZ or generator)
       - gradients dBdr, dBdz computed from Bmag on the grid
 
-    The default file format mirrors the notebook expectation:
+    The default file format is:
       - r: 1D array (meters)
       - z: 1D array (meters)
       - Bmag: (Nr,Nz) array (Tesla)
