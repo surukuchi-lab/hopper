@@ -1,6 +1,6 @@
 # Hopper
 
-This package generates synthetic single-electron CRES tracks and complex IQ time series.
+This package generates synthetic single/multi-electron CRES tracks and complex IQ time series.
 
 Key features:
 - Axial bounce motion from adiabatic invariant μ
