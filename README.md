@@ -20,4 +20,4 @@ conda activate hopper
 pip install -e .
 
 ## Run
-cres-sim configs/example.yaml
+hopper-sim configs/example.yaml
