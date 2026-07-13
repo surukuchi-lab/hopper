@@ -55,8 +55,7 @@ class DynamicTrack:
     B_T: np.ndarray  # instantaneous |B| experienced by the electron
 
 
-def _infer_r_phi_from_xy(cfg: MainConfig) -> Tuple[float, float]:
-    e = cfg.electron
+def _infer_r_phi_from_xy(e: ElectronConfig) -> Tuple[float, float]:
     if e.x0_m is None or e.y0_m is None:
         return float(e.r0_m), float(e.phi0_rad)
     x = float(e.x0_m)
@@ -104,7 +103,7 @@ def build_dynamic_track(
     t0 = float(sim.starting_time_s)
     Tdur = float(sim.track_length_s)
 
-    r0_m, phi0 = _infer_r_phi_from_xy(cfg)
+    r0_m, phi0 = _infer_r_phi_from_xy(cfg.electron)
     z0_m = float(elec.z0_m)
 
     # Initial conditions (also used for drift + radius/power proxies)

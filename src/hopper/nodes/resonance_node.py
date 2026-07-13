@@ -13,6 +13,7 @@ class ResonanceNode:
     name: str = "resonance"
 
     def run(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
+        print("[NODE]: ResonanceNode")
         res_cfg = self.cfg.resonance
         feat = self.cfg.features
 

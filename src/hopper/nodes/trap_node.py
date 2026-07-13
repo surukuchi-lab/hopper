@@ -15,6 +15,7 @@ class TrapNode:
     name: str = "trap"
 
     def run(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
+        print("[NODE]: TrapNode")
         trap = self.cfg.trap
         npz_path = Path(trap.field_map_npz)
 

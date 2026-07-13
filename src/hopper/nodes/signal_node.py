@@ -13,6 +13,7 @@ class SignalNode:
     name: str = "signal"
 
     def run(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
+        print("[NODE]: SignalNode")
         track_dyn = ctx["track_dyn"]
         sig_res = synthesize_iq(self.cfg, track_dyn)
 

@@ -14,6 +14,8 @@ class ModeMapNode:
     name: str = "mode_map"
 
     def run(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
+        
+        print("[NODE]: ModeMapNode")
         cav_cfg = self.cfg.cavity
         cav = Cavity(radius_m=cav_cfg.radius_m, length_m=cav_cfg.length_m, f0_hz=cav_cfg.f0_hz, Q=cav_cfg.Q)
 

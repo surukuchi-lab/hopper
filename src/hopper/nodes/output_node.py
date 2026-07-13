@@ -15,6 +15,7 @@ class OutputNode:
     name: str = "output"
 
     def run(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
+        print("[NODE]: OutputNode")
         out_cfg = self.cfg.output
         feat = self.cfg.features
 

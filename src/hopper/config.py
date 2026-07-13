@@ -15,10 +15,15 @@ import yaml
 
 InterpMethod = Literal["bilinear", "linear", "nearest", "cubic_spline"]
 AmplitudeMode = Literal["sqrtP", "P"]
+    
+indexed_keys = {
+    "electrons",
+}
 
 
 @dataclass
 class SimulationConfig:
+    n_pileup: int = 1
     starting_time_s: float = 0.0
     track_length_s: float = 1.0e-3
 
@@ -165,7 +170,46 @@ class MainConfig:
     cavity: CavityConfig = field(default_factory=CavityConfig)
     mode_map: ModeMapConfig = field(default_factory=ModeMapConfig)
     resonance: ResonanceConfig = field(default_factory=ResonanceConfig)
-    electron: ElectronConfig = field(default_factory=ElectronConfig)
+    
+    #Add a electron downwards compatability, but augment this to n_pileup particles
+    # previously: 
+    #electron: ElectronConfig = field(default_factory=ElectronConfig)
+    
+    electrons: dict[int, ElectronConfig] = field(default_factory=dict)
+    
+    @property
+    def electron(self) -> ElectronConfig:
+        return self.get_electron(0)
+
+    def get_electron(self, idx: int) -> ElectronConfig:
+        keys = sorted(self.electrons)
+
+        if idx >= len(keys):
+            raise IndexError(
+                f"Requested electron {idx}, but only {len(keys)} available."
+            )
+
+        return self.electrons[keys[idx]]
+
+    def active_electrons(self):
+        """
+        Returns the first simulation.n_pileup electrons.
+        """
+        n = self.simulation.n_pileup
+
+        if len(self.electrons) < n:
+            raise ValueError(
+                f"Simulation requests n_pileup={n}, "
+                f"but only {len(self.electrons)} electrons were provided.\n"
+                "Specify more electrons or lower simulation.n_pileup."
+            )
+        for key in keys[:n]:
+            yield key, self.electrons[key]
+        
+        # alternatively this?
+        #keys = sorted(self.electrons)
+        #return [(k, self.electrons[k]) for k in keys[:n]]
+    
     dynamics: DynamicsConfig = field(default_factory=DynamicsConfig)
     signal: SignalConfig = field(default_factory=SignalConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
@@ -188,6 +232,16 @@ def load_config(path: str | Path) -> MainConfig:
     if not isinstance(data, dict):
         raise ValueError(f"Config {path} must parse to a dict")
 
+    
+    # Move electron-> electrons[0] for backwards compatibility
+    if "electron" in data:
+        data["electrons"] = {0: data.pop("electron")}
+    
+    electrons = {
+        int(eid): ElectronConfig(**edata)
+        for eid, edata in data.get("electrons", {}).items()
+    }
+
     cfg = MainConfig()
 
     import dataclasses
@@ -200,13 +254,24 @@ def load_config(path: str | Path) -> MainConfig:
         return obj
 
     defaults_dict = asdict_dc(cfg)
-
+    
+    
     def validate_keys(defaults: Dict[str, Any], user: Dict[str, Any], prefix: str = "") -> None:
-        for k in user.keys():
+        for k, value in user.items():
+
             if k not in defaults:
                 raise ValueError(f"Unknown config key: {prefix}{k}")
-            if isinstance(user[k], dict) and isinstance(defaults[k], dict):
-                validate_keys(defaults[k], user[k], prefix=f"{prefix}{k}.")
+
+            if k in indexed_keys:
+                continue
+
+            if isinstance(value, dict) and isinstance(defaults[k], dict):
+                validate_keys(
+                    defaults[k],
+                    value,
+                    prefix=f"{prefix}{k}."
+                )
+
 
     validate_keys(defaults_dict, data)
     cfg_dict = _deep_update(defaults_dict, data)
@@ -218,7 +283,11 @@ def load_config(path: str | Path) -> MainConfig:
     cavity = CavityConfig(**cfg_dict["cavity"])
     mode_map = ModeMapConfig(**cfg_dict["mode_map"])
     resonance = ResonanceConfig(**cfg_dict["resonance"])
-    electron = ElectronConfig(**cfg_dict["electron"])
+    electrons = {
+        int(eid): ElectronConfig(**edata)
+        for eid, edata in cfg_dict["electrons"].items()
+    }
+    #electron = ElectronConfig(**cfg_dict["electron"])
     dynamics = DynamicsConfig(**cfg_dict["dynamics"])
     signal = SignalConfig(**cfg_dict["signal"])
     output = OutputConfig(**cfg_dict["output"])
@@ -230,7 +299,7 @@ def load_config(path: str | Path) -> MainConfig:
         cavity=cavity,
         mode_map=mode_map,
         resonance=resonance,
-        electron=electron,
+        electrons=electrons,
         dynamics=dynamics,
         signal=signal,
         output=output,

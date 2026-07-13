@@ -14,6 +14,7 @@ class DynamicsNode:
     name: str = "dynamics"
 
     def run(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
+        print("[NODE]: DynamicsNode")
         field = ctx["field"]
         mode_map = ctx["mode_map"]
         resonance = ctx.get("resonance_curve", ResonanceCurve.unity())

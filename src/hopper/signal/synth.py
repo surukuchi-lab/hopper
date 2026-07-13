@@ -46,6 +46,7 @@ def synthesize_iq(cfg: MainConfig, track_dyn: DynamicTrack) -> SignalResult:
       s_IF(t) = A(t) * exp(i (phi_RF(t) - 2π f_LO t + carrier_phase0))
     """
     sig = cfg.signal
+    elec = cfg.electron
     sim = cfg.simulation
 
     if sig.lo_hz is None:
@@ -79,7 +80,8 @@ def synthesize_iq(cfg: MainConfig, track_dyn: DynamicTrack) -> SignalResult:
 
     track_full = resample_dynamic_track(track_dyn, t)
 
-    carrier_phase0 = float(sig.carrier_phase0_rad)
+    # Lend out the initial kinematical configuration of the electron here
+    carrier_phase0 = float(elec.cyclotron_phase0_rad)
     phi_if = track_full.phase_rf - 2.0 * np.pi * f_lo * t + carrier_phase0
 
     iq = track_full.amp * np.exp(1j * phi_if)
