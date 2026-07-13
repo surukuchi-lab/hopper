@@ -17,7 +17,7 @@ def build_config(base_cfg: MainConfig, electrons: dict[int, dict]) -> MainConfig
     cfg.electrons = { eid: ElectronConfig(**edata) for eid, edata in electrons.items() }
     return cfg
 
-def run_pipeline_notebook(config_path: str | Path, electrons: dict[int, dict]) -> Dict[str, Any]:
+def run_pipeline_scriptable(config_path: str | Path, electrons: dict[int, dict]) -> Dict[str, Any]:
     cfg = load_config(config_path)
     cfg = build_config(cfg, electrons)
     ctx: Dict[str, Any] = {"cfg": cfg}
@@ -27,13 +27,15 @@ def run_pipeline_notebook(config_path: str | Path, electrons: dict[int, dict]) -
         ResonanceNode(cfg),
         DynamicsNode(cfg),
         SignalNode(cfg),
-        OutputNode(cfg),
     ]
 
     for node in nodes:
         ctx = node.run(ctx)
 
-    return ctx
+    config = ctx["cfg"]
+    #electron = ctx["electrons"]
+    signal = ctx["signal_result"]
+    return electron, signal
 
 def run_pipeline(cfg: MainConfig) -> Dict[str, Any]:
     """
