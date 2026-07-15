@@ -16,8 +16,10 @@ def build_config(base_cfg: MainConfig, electrons: dict[int, dict]) -> MainConfig
     cfg = deepcopy(base_cfg)
     cfg.electrons = { eid: ElectronConfig(**edata) for eid, edata in electrons.items() }
     return cfg
+    
 
 def run_pipeline_scriptable(config_path: str | Path, electrons: dict[int, dict]) -> Dict[str, Any]:
+    
     cfg = load_config(config_path)
     cfg = build_config(cfg, electrons)
     ctx: Dict[str, Any] = {"cfg": cfg}
@@ -33,9 +35,12 @@ def run_pipeline_scriptable(config_path: str | Path, electrons: dict[int, dict])
         ctx = node.run(ctx)
 
     config = ctx["cfg"]
-    #electron = ctx["electrons"]
     signal = ctx["signal_result"]
-    return electron, signal
+    # The latter two are to intercept the dynamics at different stages in the processing
+    track_if = ctx["signal_result"].track_if
+    track_dyn = ctx["track_dyn"]
+    field = ctx["field"]
+    return config, signal, track_if, track_dyn, field
 
 def run_pipeline(cfg: MainConfig) -> Dict[str, Any]:
     """
