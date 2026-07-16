@@ -15,12 +15,25 @@ class DynamicsNode:
 
     def run(self, ctx: Dict[str, Any]) -> Dict[str, Any]:
         print("[NODE]: DynamicsNode")
+    
         field = ctx["field"]
         mode_map = ctx["mode_map"]
         resonance = ctx.get("resonance_curve", ResonanceCurve.unity())
-
-        track_dyn = build_dynamic_track(self.cfg, field=field, mode_map=mode_map, resonance=resonance)
-
+    
+        tracks = {}
+    
+        for idx, electron_cfg in self.cfg.active_electrons():
+            track_dyn = build_dynamic_track(
+                self.cfg,
+                field=field,
+                mode_map=mode_map,
+                resonance=resonance,
+                electron_cfg=electron_cfg,   # falls build_dynamic_track das unterstützt
+            )
+            tracks[idx] = track_dyn
+            print(f"[NDYN]: Electron {idx} processed")
+    
         ctx = dict(ctx)
-        ctx["track_dyn"] = track_dyn
+        ctx["track_dyn"] = tracks
         return ctx
+

@@ -87,6 +87,7 @@ def build_dynamic_track(
     field: FieldMap,
     mode_map: ModeMap,
     resonance: ResonanceCurve,
+    electron_cfg: ElectronConfig,
 ) -> DynamicTrack:
     """
     Build a non-uniform dynamics track using:
@@ -99,7 +100,7 @@ def build_dynamic_track(
     sim = cfg.simulation
     feat = cfg.features
     dyn = cfg.dynamics
-    elec = cfg.electron
+    elec = electron_cfg
 
     t0 = float(sim.starting_time_s)
     Tdur = float(sim.track_length_s)

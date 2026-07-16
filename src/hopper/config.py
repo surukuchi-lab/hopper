@@ -196,7 +196,8 @@ class MainConfig:
         Returns the first simulation.n_pileup electrons.
         """
         n = self.simulation.n_pileup
-
+        keys = sorted(self.electrons)
+        
         if len(self.electrons) < n:
             raise ValueError(
                 f"Simulation requests n_pileup={n}, "

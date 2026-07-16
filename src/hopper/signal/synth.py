@@ -77,7 +77,6 @@ def synthesize_iq(cfg: MainConfig, track_dyn: DynamicTrack) -> SignalResult:
         n = 2
     dt = 1.0 / fs
     t = t0 + dt * np.arange(n, dtype=float)
-
     track_full = resample_dynamic_track(track_dyn, t)
 
     # Lend out the initial kinematical configuration of the electron here
@@ -128,4 +127,33 @@ def synthesize_iq(cfg: MainConfig, track_dyn: DynamicTrack) -> SignalResult:
         iq_if=iq_if,
         fs_if_hz=fs_if_out,
         track_if=track_if,
+    )
+
+def pileup_add(signals: dict[int, SignalResult]) -> SignalResult:
+    if not signals:
+        raise ValueError("No signals to combine.")
+
+    results = list(signals.values())
+
+    ref = results[0]
+
+    iq = np.zeros_like(ref.iq)
+    iq_if = np.zeros_like(ref.iq_if)
+
+    for sig in results:
+        if sig.iq.shape != ref.iq.shape:
+            raise ValueError("All signals must have the same length.")
+
+        iq += sig.iq
+        iq_if += sig.iq_if
+
+    return SignalResult(
+        t=ref.t,
+        iq=iq,
+        f_lo_hz=ref.f_lo_hz,
+        fs_hz=ref.fs_hz,
+        t_if=ref.t_if,
+        iq_if=iq_if,
+        fs_if_hz=ref.fs_if_hz,
+        track_if=ref.track_if,      # oder ref.track_if?
     )
