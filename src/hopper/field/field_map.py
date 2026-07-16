@@ -16,6 +16,7 @@ def _placeholder_field(r: np.ndarray, z: np.ndarray) -> Tuple[np.ndarray, np.nda
     Simple non-physical placeholder field used only when no map is available.
     Mirrors the notebook's fallback structure.
     """
+    print("[FIELD]: Using CCA-like placeholder magnetic field, as specified field file was not found or is not used on purpose")
     rr = r[:, None]
     zz = z[None, :]
     Bmag = 1.0 + 0.02 * rr * rr + 0.05 * zz * zz
