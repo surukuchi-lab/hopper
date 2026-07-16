@@ -96,7 +96,7 @@ def synthesize_iq(cfg: MainConfig, track_dyn: DynamicTrack) -> SignalResult:
                 vx=track_full.vx, vy=track_full.vy, vz=track_full.vz,
                 x_gc=track_full.x_gc, y_gc=track_full.y_gc, z_gc=track_full.z_gc,
                 vx_gc=track_full.vx_gc, vy_gc=track_full.vy_gc, vz_gc=track_full.vz_gc,
-                f_c_hz=track_full.f_c_hz,
+                E_eV=track_full.E_eV, f_c_hz=track_full.f_c_hz,
                 amp=track_full.amp / rms,
                 phase_rf=track_full.phase_rf,
             )

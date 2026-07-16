@@ -49,6 +49,7 @@ class DynamicTrack:
     vy_gc: np.ndarray
     vz_gc: np.ndarray
 
+    E_eV: np.ndarray
     f_c_hz: np.ndarray
     amp: np.ndarray
     phase_rf: np.ndarray  # RF phase integral (radians)
@@ -392,7 +393,7 @@ def build_dynamic_track(
         vx=vx, vy=vy, vz=vz,
         x_gc=x_gc, y_gc=y_gc, z_gc=z_gc,
         vx_gc=vx_gc, vy_gc=vy_gc, vz_gc=vz_gc,
-        f_c_hz=f_c,
+        E_eV = E_eV, f_c_hz=f_c,
         amp=amp,
         phase_rf=phase_rf,
         B_T=np.asarray(B_T, dtype=float),
@@ -421,7 +422,7 @@ def resample_dynamic_track(track: DynamicTrack, t_new: np.ndarray) -> DynamicTra
         vx=rs(track.vx), vy=rs(track.vy), vz=rs(track.vz),
         x_gc=rs(track.x_gc), y_gc=rs(track.y_gc), z_gc=rs(track.z_gc),
         vx_gc=rs(track.vx_gc), vy_gc=rs(track.vy_gc), vz_gc=rs(track.vz_gc),
-        f_c_hz=rs(track.f_c_hz),
+        E_eV=rs(track.E_eV), f_c_hz=rs(track.f_c_hz),
         amp=rs(track.amp),
         phase_rf=phase_rs,
         B_T=B_T_rs,
