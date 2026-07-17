@@ -207,6 +207,11 @@ class MainConfig:
                 "Specify more electrons or lower simulation.n_pileup."
             )
         for key in keys[:n]:
+            el = self.electrons[key]
+            sim = self.simulation
+            # Electron track length specification requires double check with the simulation time
+            if el.starting_time_e + el.track_length_e > sim.starting_time_s + sim.track_length_s:
+                raise ValueError(f"Electron track {key} is longer than simulation duration")
             yield key, self.electrons[key]
         
         # alternatively this?
