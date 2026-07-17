@@ -154,6 +154,7 @@ class SignalConfig:
     if_filter_cutoff_ratio: float = 0.9
     carrier_phase0_rad: float = 0.0
     normalize_power: bool = False
+    save_ind_signals: bool = False
 
 
 @dataclass

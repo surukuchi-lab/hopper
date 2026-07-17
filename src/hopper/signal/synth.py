@@ -38,7 +38,7 @@ def _apply_sos_filter(x: np.ndarray, sos) -> np.ndarray:
     return sosfiltfilt(sos, x)
 
 
-def synthesize_iq(cfg: MainConfig, track_dyn: DynamicTrack) -> SignalResult:
+def synthesize_iq(cfg: MainConfig, track_dyn: DynamicTrack, electron_cfg: ElectronConfig) -> SignalResult:
     """
     Generate complex IQ time series from a DynamicTrack.
 
@@ -46,7 +46,7 @@ def synthesize_iq(cfg: MainConfig, track_dyn: DynamicTrack) -> SignalResult:
       s_IF(t) = A(t) * exp(i (phi_RF(t) - 2π f_LO t + carrier_phase0))
     """
     sig = cfg.signal
-    elec = cfg.electron
+    elec = electron_cfg
     sim = cfg.simulation
 
     if sig.lo_hz is None:
@@ -132,31 +132,3 @@ def synthesize_iq(cfg: MainConfig, track_dyn: DynamicTrack) -> SignalResult:
         track_if=track_if,
     )
 
-def pileup_add(signals: dict[int, SignalResult]) -> SignalResult:
-    if not signals:
-        raise ValueError("No signals to combine.")
-
-    results = list(signals.values())
-
-    ref = results[0]
-
-    iq = np.zeros_like(ref.iq)
-    iq_if = np.zeros_like(ref.iq_if)
-
-    for sig in results:
-        if sig.iq.shape != ref.iq.shape:
-            raise ValueError("All signals must have the same length.")
-
-        iq += sig.iq
-        iq_if += sig.iq_if
-
-    return SignalResult(
-        t=ref.t,
-        iq=iq,
-        f_lo_hz=ref.f_lo_hz,
-        fs_hz=ref.fs_hz,
-        t_if=ref.t_if,
-        iq_if=iq_if,
-        fs_if_hz=ref.fs_if_hz,
-        track_if=ref.track_if,      # oder ref.track_if?
-    )
