@@ -36,11 +36,12 @@ def run_pipeline_scriptable(config_path: str | Path, electrons: dict[int, dict])
 
     config = ctx["cfg"]
     signal = ctx["signal_result"]
+    signal_dict = ctx["individual_signals"]
     # The latter two are to intercept the dynamics at different stages in the processing
     track_if = ctx["signal_result"].track_if
     track_dyn = ctx["track_dyn"]
     field = ctx["field"]
-    return config, signal, track_if, track_dyn, field
+    return config, signal, signal_dict, track_if, track_dyn, field
 
 def run_pipeline(cfg: MainConfig) -> Dict[str, Any]:
     """

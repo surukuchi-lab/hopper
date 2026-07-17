@@ -102,8 +102,8 @@ def build_dynamic_track(
     dyn = cfg.dynamics
     elec = electron_cfg
 
-    t0 = float(sim.starting_time_s)
-    Tdur = float(sim.track_length_s)
+    t0 = float(elec.starting_time_e)
+    Tdur = float(elec.track_length_e)
 
     r0_m, phi0 = _infer_r_phi_from_xy(cfg.electron)
     z0_m = float(elec.z0_m)

@@ -88,6 +88,8 @@ class ElectronConfig:
     x0_m: Optional[float] = None
     y0_m: Optional[float] = None
     vpar_sign: int = 1
+    starting_time_e: float = 0.0
+    track_length_e: float = 0.0001
     cyclotron_phase0_rad: float = 0.0
 
 

@@ -79,11 +79,14 @@ def synthesize_iq(cfg: MainConfig, track_dyn: DynamicTrack) -> SignalResult:
     t = t0 + dt * np.arange(n, dtype=float)
     track_full = resample_dynamic_track(track_dyn, t)
 
-    # Lend out the initial kinematical configuration of the electron here
+    # Lend out the initial kinematical configuration and track start information of the electron here
     carrier_phase0 = float(elec.cyclotron_phase0_rad)
+    track_start = float(elec.starting_time_e)
+
     phi_if = track_full.phase_rf - 2.0 * np.pi * f_lo * t + carrier_phase0
 
-    iq = track_full.amp * np.exp(1j * phi_if)
+    heaviside = np.heaviside(t - track_start, 0.0)
+    iq = track_full.amp * np.exp(1j * phi_if) * heaviside
 
     if sig.normalize_power:
         rms = float(np.sqrt(np.mean(np.abs(iq) ** 2)))
