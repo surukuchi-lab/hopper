@@ -22,7 +22,6 @@ wheels/
 *.egg
 MANIFEST
 
-
 # Installer logs
 pip-log.txt
 pip-delete-this-delete.txt
