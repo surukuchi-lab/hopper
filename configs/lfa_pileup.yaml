@@ -67,7 +67,7 @@ signal:
   if_filter_cutoff_ratio: 0.9
   carrier_phase0_rad: 0.0
   normalize_power: false
-  save_ind_signals: false # Saving individual signals (npileup * up to 2e6 entries) gives us RAM headaches, so this should not be switched on carelessly
+  save_ind_signals: true # Saving individual signals (npileup * up to 2e6 entries) gives us RAM headaches, so this should not be switched on carelessly
 
 output:
   out_dir: /home/jankup/p8_software/hopper/cres-signal-sim/outputs
