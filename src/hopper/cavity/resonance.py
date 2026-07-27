@@ -1,3 +1,12 @@
+"""
+Module: hopper.cavity.resonance
+
+Developer: ehtkarim
+Date: April 29, 2026
+
+Represents measured or analytic cavity resonance curves and evaluates complex response weights.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

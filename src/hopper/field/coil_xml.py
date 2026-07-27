@@ -1,3 +1,12 @@
+"""
+Module: hopper.field.coil_xml
+
+Developer: ehtkarim
+Date: April 29, 2026
+
+Parses axisymmetric current-loop coil definitions from XML field-configuration files.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

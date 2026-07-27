@@ -1,0 +1,178 @@
+physics:
+  constants_preset: pdg_2022              # pdg_2022 OR pdg_2021 OR locust_kassiopeia_2021 OR locust_kassiopeia_2006
+
+simulation:
+  starting_time_s: 0.0
+  track_length_s: 0.001
+
+electron:
+  position_reference: guiding_center   # guiding_center OR instantaneous
+  position_coordinates: cartesian    # auto OR cylindrical OR cartesian
+  energy_eV: 18563.25181
+  pitch_angle_deg: 89.0
+  x0_m: -3.693708262e-12
+  y0_m: 0.0004833309187
+  z0_m: 6.016470182e-05
+  vpar_sign: 1
+  cyclotron_phase0_rad: 2.717477649         # initial gyrophase; for guiding_center starts this selects the initial orbit point around the configured guiding center
+
+# Optional pileup tracks. If omitted or empty, the single electron block above is used.
+tracks: []
+
+campaign:
+  enabled: false
+  parameter_ranges: {}
+  slurm_partition: null
+  slurm_time: "01:00:00"
+  slurm_cpus_per_task: 1
+  slurm_mem_per_cpu: null
+  max_jobs: null
+
+features:
+  include_true_orbit: true
+  include_gradB: true
+  include_curvature_drift: true
+  include_resonance: false
+  amplitude_mode: sqrtP
+  normalize_amp_at_t0: false
+
+trap:
+  field_map_npz: ../resources/field_map_rz_components_CCA_V44.npz
+  coil_xml: null                       # accepts absolute paths or paths relative to this config file
+  generate_if_missing: false
+  placeholder_if_missing: false
+  interpolation: bilinear
+  clamp_to_grid: true
+  grid:
+    r_max_m: 0.007
+    z_min_m: -0.12992
+    z_max_m: 0.12992
+    n_r: 201
+    n_z: 801
+
+cavity:
+  radius_m: 0.007
+  length_m: 0.25984
+  f0_hz: 25.904e9
+  Q: 550
+  response_model: time_evolution
+  output_coupling_fraction: 1.0
+  port_phase_rad: 0.0
+  initial_cavity_phase_rad: 0.0
+  extend_ringdown_s: null
+  excitation_enabled: true
+  ringup_enabled: true
+  back_reaction_enabled: true
+  stimulated_back_reaction: true
+  back_reaction_requires_vector_map: true
+  mode_volume_m3: null
+  source_power_scale: 1.0
+  back_reaction_scale: 1.0
+  initial_stored_energy_J: 0.0
+
+mode_map:
+  type: auto                         # auto OR vector_e_field OR analytic_te011
+  vector_e_field_map: ../resources/TE011_onRes_EVev_FieldMap_5_7apLength_QL400_coarse.fld
+  vector_component_basis: cartesian   # cartesian OR cylindrical OR auto
+  vector_field_unit_scale: 1.0
+  vector_energy_normalization_J: 1.0  # set to the HFSS/map stored-energy normalization when known
+  vector_gyro_quadrature_points: 16
+  vector_normalize_to_peak: true
+  vector_bounds_policy: error
+  vector_cache_enabled: true
+  vector_cache_path: null
+  vector_cache_rebuild: false
+  fallback_to_analytic: true          # if vector_e_field_map is missing, use analytic TE_011; back-reaction then requires disabling back_reaction_enabled
+
+resonance:
+  resonance_curve: ../resources/UnitTestOutput.root
+  object_name: cavityHisto
+  normalize_to_peak: true
+
+dynamics:
+  dt_max_s: 2e-9
+  dt_min_s: 1e-12
+  safety: 0.98
+  v_turn_threshold_c: 1e-5
+
+  axial_strategy: template_tiling      # direct OR template_tiling
+  template_build: mirror_quadrature    # auto OR integrate OR mirror_quadrature OR mirror (legacy regression only)
+
+  # Accurate default for coupled vector-map back-reaction: one-bounce
+  # quadrature-mirror retemplating with vectorized drive evaluation.  Use
+  # per_bounce_block_bounces > 1 only after the automatic period/state/phase gates pass.
+  energy_loss_model: linear_fit        # none OR per_bounce OR linear_fit OR analytic
+  energy_loss_scale: 1.0
+  energy_floor_eV: 1000.0
+  per_bounce_block_bounces: 1
+  back_reaction_block_vectorized: true
+  back_reaction_block_max_rel_state_change: 2.0e-3
+  back_reaction_max_updates_per_bounce: 512
+  back_reaction_predictor_corrector: true
+  multi_bounce_auto_max_bounces: 8
+  mirror_quadrature_min_theta_nodes: 513
+  mirror_quadrature_max_theta_nodes: 8193
+  mirror_template_max_period_rel_error: 1.0e-3
+  mirror_template_max_phase_slip_rad: 5.0e-3
+  mirror_template_moving_mirror_tol: 1.0e-8
+  compact_output_dt_s: null            # null lets coherent IF-readout runs compact to the IF source grid
+  compact_output_include_turning_points: true
+  energy_loss_fit_bounces: 20
+
+  # Keep RF phase and reported cyclotron frequency in the same reference frame.
+  # Use instantaneous with include_true_orbit=true when comparing local orbit-point B/fc.
+  cyclotron_frequency_reference: instantaneous   # guiding_center OR instantaneous
+  true_orbit_phase_iterations: 1
+
+  # phase_uniform keeps exactly this many samples per cyclotron turn on the RF/root grid.
+  time_step_strategy: phase_uniform    # axial_adaptive OR phase_bounded OR phase_uniform
+  samples_per_cyclotron_turn: 15
+
+signal:
+  lo_hz: null
+  fs_if_hz: 403e6
+  if_decim: 1
+  fs_hz: null
+  if_antialias_filter: true
+  if_filter_order: 8
+  if_filter_cutoff_ratio: 0.9
+  carrier_phase0_rad: 0.0
+  normalize_power: false
+  cavity_filter_grid: if
+  cavity_update: first_order_hold
+  require_analytic_baseband_drive: true
+  if_bandwidth_tolerance: 1.0e-3
+
+readout:
+  model: locust_like_baseband          # none OR locust_exact_baseband OR locust_like_baseband
+  require_analytic_baseband_drive: true
+  fast_decimation_factor: 1
+  store_fast_iq: false
+  chunk_size: 2000000
+  lpf:
+    type: none                          # production fast path; use fft_brickwall with fast_decimation_factor=10 for exact Locust emulation
+    cutoff_ratio_of_final_nyquist: 0.85
+    n_windows: 80
+  noise:
+    enabled: false
+    noise_floor_psd_W_per_Hz: 70.0e-23
+    impedance_ohm: 50.0
+    seed: null
+  digitizer:
+    enabled: false
+    bit_depth: 8
+    data_type_size: 1
+    signed: false
+    v_range: 1.0
+    v_offset: 0.0
+    strict_range: true
+
+output:
+  out_dir: outputs                  # relative to the working directory
+  basename: sim_refactor_24_CCA
+  write_npz: true
+  write_root: true
+  track_sampling: if_sampled           # rf_sampled writes phase-uniform RF-grid ROOT diagnostics; use if_sampled for fastest production output
+  root_chunk_size: 200000
+  write_log: true
+  log_file: null

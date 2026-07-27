@@ -1,3 +1,12 @@
+"""
+Module: hopper.cavity.cavity
+
+Developer: ehtkarim
+Date: April 29, 2026
+
+Defines the cavity geometry and resonance parameters for single-mode CRES simulations.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
