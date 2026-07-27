@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 from typing import Any, Dict
 
 from ..config import MainConfig
-from ..signal.synth import synthesize_iq, pileup_add
+from ..signal.synth import synthesize_iq
 
 @dataclass
 class SignalNode:
