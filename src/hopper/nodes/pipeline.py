@@ -70,7 +70,3 @@ def run_pipeline(cfg: MainConfig) -> Dict[str, Any]:
 def run_from_config(config_path: str | Path) -> Dict[str, Any]:
     cfg = load_config(config_path)
     return run_pipeline(cfg)
-
-def run_from_config(config_path: str | Path) -> Dict[str, Any]:
-    cfg = load_config(config_path)
-    return run_pipeline(cfg)
