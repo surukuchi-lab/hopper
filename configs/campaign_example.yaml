@@ -1,0 +1,16 @@
+# Campaign-level overlay for generating a grid of Hopper jobs.
+# This file is intentionally separate from configs/example.yaml: campaign tooling can
+# combine these ranges with a base run config and submit one Slurm job per point.
+base_config: configs/example.yaml
+campaign:
+  enabled: true
+  slurm_partition: null
+  slurm_time: "01:00:00"
+  slurm_cpus_per_task: 2
+  slurm_mem_per_cpu: 5G
+  max_jobs: null
+  parameter_ranges:
+    electron.energy_eV: [18563.0, 18563.5]
+    electron.pitch_angle_deg: [88.5, 89.0, 89.5]
+    electron.r0_m: [0.05, 0.10, 0.16]
+    electron.cyclotron_phase0_rad: [0.0, 1.57079632679, 3.14159265359]

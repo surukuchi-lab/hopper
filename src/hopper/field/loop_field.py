@@ -1,11 +1,18 @@
+"""
+Module: hopper.field.loop_field
+
+Developer: ehtkarim
+Date: April 29, 2026
+
+Evaluates the magnetic field of circular current loops in cylindrical coordinates.
+"""
+
 from __future__ import annotations
 
 from typing import Tuple
 
 import numpy as np
-from scipy.special import ellipe, ellipk
-
-from ..constants import MU0
+from .. import constants as const
 
 
 def loop_field_br_bz_cylindrical(
@@ -44,7 +51,7 @@ def loop_field_br_bz_cylindrical(
     # On-axis: Bz = μ0 I a^2 / (2 (a^2 + z^2)^(3/2))
     if np.any(on_axis):
         zax = zz[on_axis]
-        Bz[on_axis] = MU0 * I * a * a / (2.0 * np.power(a * a + zax * zax, 1.5))
+        Bz[on_axis] = const.MU0 * I * a * a / (2.0 * np.power(a * a + zax * zax, 1.5))
         Br[on_axis] = 0.0
 
     # Off-axis: elliptic integral formulas
@@ -55,13 +62,15 @@ def loop_field_br_bz_cylindrical(
         k2 = (4.0 * a * r1) / ((a + r1) ** 2 + z1**2)
         k2 = np.clip(k2, 0.0, 1.0 - 1e-15)
 
+        from scipy.special import ellipe, ellipk
+
         K = ellipk(k2)
         E = ellipe(k2)
 
         denom = np.sqrt((a + r1) ** 2 + z1**2)
         rho2 = (a - r1) ** 2 + z1**2
 
-        pref = MU0 * I / (2.0 * np.pi * denom)
+        pref = const.MU0 * I / (2.0 * np.pi * denom)
 
         Bz_off = pref * (K + ((a * a - r1 * r1 - z1 * z1) / (rho2 + 1e-300)) * E)
         Br_off = pref * (z1 / (r1 + 1e-300)) * (-K + ((a * a + r1 * r1 + z1 * z1) / (rho2 + 1e-300)) * E)

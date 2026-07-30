@@ -1,3 +1,12 @@
+"""
+Module: hopper.utils.math
+
+Developer: ehtkarim
+Date: April 29, 2026
+
+Provides numerical utilities for integration, interpolation, filtering, and array handling.
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
