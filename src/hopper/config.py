@@ -19,17 +19,11 @@ InterpMethod = Literal["bilinear", "linear", "nearest", "cubic_spline"]
 AmplitudeMode = Literal["sqrtP", "P"]
 TrackSampling = Literal["rf_sampled", "if_sampled"]
 
-### JK: If there is a more straight forward way to distingush between the "standard" configurations and the indexed electron config, this should be changed
-indexed_keys = {
-    "electrons",
-}
-
 
 @dataclass
 class SimulationConfig:
-    n_pileup: int = 1
     starting_time_s: float = 0.0
-    track_length_s: float = 1.0e-3
+    duration_s: float = 1.0e-3
 
 
 
@@ -147,7 +141,7 @@ class ElectronConfig:
     y0_m: Optional[float] = None
     vpar_sign: int = 1
     starting_time_e: float = 0.0
-    track_length_e: float = 0.0001
+    track_length_e: float = 1.e-5
     cyclotron_phase0_rad: float = 0.0
 
 
@@ -254,8 +248,7 @@ class SignalConfig:
     if_filter_cutoff_ratio: float = 0.9
     carrier_phase0_rad: float = 0.0
     normalize_power: bool = False
-    save_ind_signals: bool = False
-
+    save_ind_signals: bool = True
     # Cavity IQ generation.  The safe production path builds the analytic
     # baseband electron drive, applies the complex cavity response in baseband,
     # and only then performs readout filtering/decimation.
@@ -335,53 +328,7 @@ class MainConfig:
     cavity: CavityConfig = field(default_factory=CavityConfig)
     mode_map: ModeMapConfig = field(default_factory=ModeMapConfig)
     resonance: ResonanceConfig = field(default_factory=ResonanceConfig)
-    
-    #Add a electron downwards compatability, but augment this to n_pileup particles
-    # previously: 
-    #electron: ElectronConfig = field(default_factory=ElectronConfig)
-    
-    electrons: dict[int, ElectronConfig] = field(default_factory=dict)
-    
-    @property
-    def electron(self) -> ElectronConfig:
-        return self.get_electron(0)
-
-    def get_electron(self, idx: int) -> ElectronConfig:
-        keys = sorted(self.electrons)
-
-        if idx >= len(keys):
-            raise IndexError(
-                f"Requested electron {idx}, but only {len(keys)} available."
-            )
-
-        return self.electrons[keys[idx]]
-
-    def active_electrons(self):
-        """
-        Returns the first simulation.n_pileup electrons.
-        """
-        n = self.simulation.n_pileup
-        keys = sorted(self.electrons)
-        
-        if len(self.electrons) < n:
-            raise ValueError(
-                f"Simulation requests n_pileup={n}, "
-                f"but only {len(self.electrons)} electrons were provided.\n"
-                "Specify more electrons or lower simulation.n_pileup."
-            )
-        for key in keys[:n]:
-            el = self.electrons[key]
-            sim = self.simulation
-            # Electron track length specification requires double check with the simulation time
-            if el.starting_time_e + el.track_length_e > sim.starting_time_s + sim.track_length_s:
-                raise ValueError(f"Electron track {key} is longer than simulation duration")
-            yield key, self.electrons[key]
-        
-        # alternatively this?
-        #keys = sorted(self.electrons)
-        #return [(k, self.electrons[k]) for k in keys[:n]]
-    
-    #electron: ElectronConfig = field(default_factory=ElectronConfig)
+    electron: ElectronConfig = field(default_factory=ElectronConfig)
     # Optional pileup tracks. If empty, the single `electron` block is used.
     tracks: list[ElectronConfig] = field(default_factory=list)
     campaign: CampaignConfig = field(default_factory=CampaignConfig)
@@ -408,16 +355,6 @@ def load_config(path: str | Path) -> MainConfig:
     if not isinstance(data, dict):
         raise ValueError(f"Config {path} must parse to a dict")
 
-    
-    # Move electron-> electrons[0] for backwards compatibility
-    if "electron" in data:
-        data["electrons"] = {0: data.pop("electron")}
-    
-    electrons = {
-        int(eid): ElectronConfig(**edata)
-        for eid, edata in data.get("electrons", {}).items()
-    }
-
     cfg = MainConfig()
 
     import dataclasses
@@ -430,24 +367,13 @@ def load_config(path: str | Path) -> MainConfig:
         return obj
 
     defaults_dict = asdict_dc(cfg)
-    
-    
-    def validate_keys(defaults: Dict[str, Any], user: Dict[str, Any], prefix: str = "") -> None:
-        for k, value in user.items():
 
+    def validate_keys(defaults: Dict[str, Any], user: Dict[str, Any], prefix: str = "") -> None:
+        for k in user.keys():
             if k not in defaults:
                 raise ValueError(f"Unknown config key: {prefix}{k}")
-
-            if k in indexed_keys:
-                continue
-
-            if isinstance(value, dict) and isinstance(defaults[k], dict):
-                validate_keys(
-                    defaults[k],
-                    value,
-                    prefix=f"{prefix}{k}."
-                )
-
+            if isinstance(user[k], dict) and isinstance(defaults[k], dict):
+                validate_keys(defaults[k], user[k], prefix=f"{prefix}{k}.")
 
     validate_keys(defaults_dict, data)
     cfg_dict = _deep_update(defaults_dict, data)
@@ -460,11 +386,7 @@ def load_config(path: str | Path) -> MainConfig:
     cavity = CavityConfig(**cfg_dict["cavity"])
     mode_map = ModeMapConfig(**cfg_dict["mode_map"])
     resonance = ResonanceConfig(**cfg_dict["resonance"])
-    electrons = {
-        int(eid): ElectronConfig(**edata)
-        for eid, edata in cfg_dict["electrons"].items()
-    }
-    #electron = ElectronConfig(**cfg_dict["electron"])
+    electron = ElectronConfig(**cfg_dict["electron"])
     tracks = [ElectronConfig(**item) for item in cfg_dict.get("tracks", [])]
     campaign = CampaignConfig(**cfg_dict.get("campaign", {}))
     dynamics = DynamicsConfig(**cfg_dict["dynamics"])
@@ -488,8 +410,7 @@ def load_config(path: str | Path) -> MainConfig:
         cavity=cavity,
         mode_map=mode_map,
         resonance=resonance,
-        electrons=electrons,
-        #electron=electron,
+        electron=electron,
         tracks=tracks,
         campaign=campaign,
         dynamics=dynamics,

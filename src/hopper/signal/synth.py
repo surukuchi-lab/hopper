@@ -9,7 +9,7 @@ Synthesizes complex IQ time series from dynamic electron tracks and cavity respo
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Optional, Sequence
 
 import numpy as np
@@ -148,8 +148,8 @@ def cavity_baseband_drive(
         v_perp = np.sqrt(np.maximum(2.0 * track_sample.mu_J_per_T * B / np.maximum(gamma * const.M_E, 1.0e-300), 0.0))
         drive = (-const.E_CHARGE) * v_perp * coupling * float(getattr(cfg.cavity, "source_power_scale", 1.0))
 
-    phase = track_sample.phase_rf + float(cfg.electron.cyclotron_phase0_rad) - 2.0 * np.pi * float(f_lo_hz) * t
-    return np.asarray(drive, dtype=np.complex128) * np.exp(1j * phase)
+    phase = track_sample.phase_rf + float(cfg.electron.cyclotron_phase0_rad) - 2.0 * np.pi * float(f_lo_hz) * (t-cfg.electron.starting_time_e)
+    return np.asarray(drive, dtype=np.complex128) * np.exp(1j * phase) * np.heaviside(t-cfg.electron.starting_time_e, 0)
 
 
 def _replace_track_signal_diagnostics(
@@ -262,7 +262,7 @@ def _fast_baseband_grid(cfg: MainConfig) -> tuple[np.ndarray, float, int, float]
     fs_out = float(cfg.signal.fs_if_hz)
     D = max(int(cfg.readout.fast_decimation_factor), 1)
     fs_fast = fs_out * D
-    n_fast = int(np.floor(float(cfg.simulation.track_length_s) * fs_fast))
+    n_fast = int(np.floor(float(cfg.simulation.duration_s) * fs_fast))
     t_fast = float(cfg.simulation.starting_time_s) + np.arange(max(n_fast, 0), dtype=float) / fs_fast
     if t_fast.size == 0:
         t_fast = np.asarray([float(cfg.simulation.starting_time_s)], dtype=float)
@@ -352,93 +352,115 @@ def synthesize_iq_pileup(
     t_fast, fs_out, D, fs_fast = _fast_baseband_grid(cfg)
     f_lo = float(cfg.signal.lo_hz) if cfg.signal.lo_hz is not None else _default_lo_for_tracks(tracks)
     drive_total = np.zeros(t_fast.size, dtype=np.complex128)
-    sampled_first: DynamicTrack | None = None
+    ind_drives = {}
     max_fc_offset_hz = 0.0
-    for track in tracks:
-        sampled = sample_dynamic_track(cfg, track, field=field, mode_map=mode_map, resonance=resonance, t_new=t_fast)
-        if sampled_first is None:
-            sampled_first = sampled
-        drive_total += cavity_baseband_drive(cfg, sampled, field=field, mode_map=mode_map, f_lo_hz=f_lo)
+    electron_cfgs = list(cfg.tracks) if cfg.tracks else [cfg.electron]
+    ind_sampled = {}
+    for idx, track in enumerate(tracks):
+        cfg_i = replace(cfg, electron=electron_cfgs[idx])
+        print("pileup signal function:", track.t[0], track.t[-1]);
+        sampled = sample_dynamic_track(cfg_i, track, field=field, mode_map=mode_map, resonance=resonance, t_new=t_fast)
+        drive_ind = cavity_baseband_drive(cfg_i, sampled, field=field, mode_map=mode_map, f_lo_hz=f_lo)
+        drive_total += drive_ind
+        if cfg.signal.save_ind_signals:
+            ind_drives[idx] = drive_ind
         if sampled.f_c_hz.size:
             max_fc_offset_hz = max(max_fc_offset_hz, float(np.max(np.abs(np.asarray(sampled.f_c_hz, dtype=float) - f_lo))))
-
+        print(f"[SIGN]: Signal {idx} generated")
+    ind_drives["total"] = drive_total
     response = make_cavity_response(cfg, f_lo)
     from ..cavity.response import integrate_complex_envelope
-    amp_state = integrate_complex_envelope(
-        t_fast,
-        drive_total,
-        lambda_per_s=response.lambda_per_s,
-        initial_amplitude_sqrt_J=response.initial_amplitude_sqrt_J,
-        update=cfg.signal.cavity_update,
-    )
-    iq_fast = response.output_from_amplitude(amp_state)
-    usable_band_hz = float(cfg.readout.lpf.cutoff_ratio_of_final_nyquist) * 0.5 * fs_out
-    if bool(cfg.signal.require_analytic_baseband_drive) and max_fc_offset_hz > usable_band_hz * (1.0 + float(cfg.signal.if_bandwidth_tolerance)):
-        import warnings
-        warnings.warn(
-            "estimated cyclotron carrier offset exceeds the usable baseband readout band; "
-            "increase signal.fs_if_hz, move signal.lo_hz, or use a wider readout filter",
-            RuntimeWarning,
-            stacklevel=2,
+
+    ind_signals = {}
+    all_drives = dict(ind_drives)
+    #all_drives["total"] = drive_total
+    
+    for idx, drive in all_drives.items():
+        amp_state = integrate_complex_envelope(
+            t_fast,
+            drive,
+            lambda_per_s=response.lambda_per_s,
+            initial_amplitude_sqrt_J=response.initial_amplitude_sqrt_J,
+            update=cfg.signal.cavity_update,
+        )
+        iq_fast = response.output_from_amplitude(amp_state)
+        usable_band_hz = float(cfg.readout.lpf.cutoff_ratio_of_final_nyquist) * 0.5 * fs_out
+        if bool(cfg.signal.require_analytic_baseband_drive) and max_fc_offset_hz > usable_band_hz * (1.0 + float(cfg.signal.if_bandwidth_tolerance)):
+            import warnings
+            warnings.warn(
+                "estimated cyclotron carrier offset exceeds the usable baseband readout band; "
+                "increase signal.fs_if_hz, move signal.lo_hz, or use a wider readout filter",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+
+        rng = np.random.default_rng(cfg.readout.noise.seed) if cfg.readout.noise.seed is not None else None
+        readout_res = process_locust_like_readout(
+            t_fast=t_fast,
+            iq_fast=iq_fast,
+            fs_out_hz=fs_out,
+            decimation_factor=D,
+            lpf_cutoff_ratio=float(cfg.readout.lpf.cutoff_ratio_of_final_nyquist),
+            lpf_mode=cfg.readout.lpf.type,
+            n_windows=int(cfg.readout.lpf.n_windows),
+            add_noise=bool(cfg.readout.noise.enabled),
+            noise_floor_psd_W_per_Hz=cfg.readout.noise.noise_floor_psd_W_per_Hz,
+            impedance_ohm=float(cfg.readout.noise.impedance_ohm),
+            rng=rng,
+            digitizer_config=cfg.readout.digitizer,
+            store_fast_iq=bool(cfg.readout.store_fast_iq),
+            exact_locust=(str(cfg.readout.model) == "locust_exact_baseband"),
         )
 
-    rng = np.random.default_rng(cfg.readout.noise.seed) if cfg.readout.noise.seed is not None else None
-    readout_res = process_locust_like_readout(
-        t_fast=t_fast,
-        iq_fast=iq_fast,
-        fs_out_hz=fs_out,
-        decimation_factor=D,
-        lpf_cutoff_ratio=float(cfg.readout.lpf.cutoff_ratio_of_final_nyquist),
-        lpf_mode=cfg.readout.lpf.type,
-        n_windows=int(cfg.readout.lpf.n_windows),
-        add_noise=bool(cfg.readout.noise.enabled),
-        noise_floor_psd_W_per_Hz=cfg.readout.noise.noise_floor_psd_W_per_Hz,
-        impedance_ohm=float(cfg.readout.noise.impedance_ohm),
-        rng=rng,
-        digitizer_config=cfg.readout.digitizer,
-        store_fast_iq=bool(cfg.readout.store_fast_iq),
-        exact_locust=(str(cfg.readout.model) == "locust_exact_baseband"),
-    )
-
-    track_if = sample_dynamic_track(cfg, tracks[0], field=field, mode_map=mode_map, resonance=resonance, t_new=readout_res.t)
-    drive_if = np.interp(readout_res.t, t_fast, np.real(drive_total)) + 1j * np.interp(readout_res.t, t_fast, np.imag(drive_total))
-    amp_if = np.interp(readout_res.t, t_fast, np.real(amp_state)) + 1j * np.interp(readout_res.t, t_fast, np.imag(amp_state))
-    y_if = response.output_from_amplitude(amp_if)
-    track_if = _replace_track_signal_diagnostics(
-        track_if,
-        amp=np.abs(y_if),
-        cavity_drive=drive_if,
-        cavity_amplitude=amp_if,
-        cavity_energy=np.abs(amp_if) ** 2,
-        cavity_power=np.abs(y_if) ** 2,
-    )
-    readout_meta = dict(readout_res.meta)
-    readout_meta.update({
-        "pileup_tracks": len(tracks),
-        "pileup_combination": "coherent_drive_sum_before_single_cavity_filter",
-        "cavity_response_model": str(cfg.cavity.response_model),
-        "baseband_max_cyclotron_offset_hz": max_fc_offset_hz,
-        "baseband_usable_band_hz": usable_band_hz,
-        "baseband_carrier_offset_within_band": bool(max_fc_offset_hz <= usable_band_hz * (1.0 + float(cfg.signal.if_bandwidth_tolerance))),
-    })
-    return SignalResult(
-        t=t_fast,
-        iq=iq_fast,
-        f_lo_hz=f_lo,
-        fs_hz=fs_fast,
-        rf_grid_kind="locust_exact_baseband_fast" if str(cfg.readout.model) == "locust_exact_baseband" else "locust_like_baseband_fast",
-        rf_grid_is_uniform_time=True,
-        t_if=readout_res.t,
-        iq_if=readout_res.iq,
-        fs_if_hz=fs_out,
-        track_rf=None,
-        track_if=track_if,
-        adc_iq=readout_res.adc_iq,
-        iq_fast=readout_res.iq_fast,
-        t_fast=readout_res.t_fast,
-        readout_meta=readout_meta,
-        amplitude_normalization=1.0,
-    )
+        if idx == "total":
+            track_if = sample_dynamic_track(cfg, tracks[0], field=field, mode_map=mode_map, resonance=resonance, t_new=readout_res.t)
+        else:
+            cfg_i = replace(cfg, electron=electron_cfgs[idx])
+            print("pileup signal function:", tracks[idx].t[0], tracks[idx].t[-1]);
+            track_if = sample_dynamic_track(cfg_i, tracks[idx], field=field, mode_map=mode_map, resonance=resonance, t_new=readout_res.t)
+        drive_if = np.interp(readout_res.t, t_fast, np.real(drive)) + 1j * np.interp(readout_res.t, t_fast, np.imag(drive))
+        amp_if = np.interp(readout_res.t, t_fast, np.real(amp_state)) + 1j * np.interp(readout_res.t, t_fast, np.imag(amp_state))
+        y_if = response.output_from_amplitude(amp_if)
+        track_if = _replace_track_signal_diagnostics(
+            track_if,
+            amp=np.abs(y_if),
+            cavity_drive=drive_if,
+            cavity_amplitude=amp_if,
+            cavity_energy=np.abs(amp_if) ** 2,
+            cavity_power=np.abs(y_if) ** 2,
+        )
+        readout_meta = dict(readout_res.meta)
+        readout_meta.update({
+            "pileup_tracks": len(tracks),
+            "pileup_combination": "coherent_drive_sum_before_single_cavity_filter",
+            "cavity_response_model": str(cfg.cavity.response_model),
+            "baseband_max_cyclotron_offset_hz": max_fc_offset_hz,
+            "baseband_usable_band_hz": usable_band_hz,
+            "baseband_carrier_offset_within_band": bool(max_fc_offset_hz <= usable_band_hz * (1.0 + float(cfg.signal.if_bandwidth_tolerance))),
+        })
+        ind_signals[idx] = SignalResult(
+            t=t_fast,
+            iq=iq_fast,
+            f_lo_hz=f_lo,
+            fs_hz=fs_fast,
+            rf_grid_kind="locust_exact_baseband_fast" if str(cfg.readout.model) == "locust_exact_baseband" else "locust_like_baseband_fast",
+            rf_grid_is_uniform_time=True,
+            t_if=readout_res.t,
+            iq_if=readout_res.iq,
+            fs_if_hz=fs_out,
+            track_rf=None,
+            track_if=track_if,
+            adc_iq=readout_res.adc_iq,
+            iq_fast=readout_res.iq_fast,
+            t_fast=readout_res.t_fast,
+            readout_meta=readout_meta,
+            amplitude_normalization=1.0,
+        )
+    #The total signal always comes last here. Individual signals might not even be defined, so in case save_ind_signals is not enabled, only the total is returned
+    if cfg.signal.save_ind_signals:
+        return ind_signals["total"], ind_signals, ind_drives, ind_sampled
+    else:
+        return ind_signals["total"], None, None, None
 
 def synthesize_iq(
     cfg: MainConfig,

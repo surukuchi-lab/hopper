@@ -81,7 +81,6 @@ class DynamicTrack:
     parallel_sign: np.ndarray
     b_cross_kappa_phi_per_m: np.ndarray
 
-    E_eV: np.ndarray
     f_c_hz: np.ndarray
     amp: np.ndarray
     phase_rf: np.ndarray
@@ -368,8 +367,9 @@ def _scalar_resample(t_old: np.ndarray, y_old: np.ndarray, t_new0: float) -> flo
 
 def _apply_instantaneous_anchor(cfg: MainConfig, t: np.ndarray, x: np.ndarray, y: np.ndarray, z: np.ndarray) -> None:
     if str(getattr(cfg.electron, "position_reference", "guiding_center")) != "instantaneous":
-        return
-    mask = np.isclose(np.asarray(t, dtype=float), float(cfg.simulation.starting_time_s), rtol=0.0, atol=1.0e-18)
+        mask = t < cfg.electron.starting_time_e
+    else:
+        mask = np.isclose(np.asarray(t, dtype=float), float(cfg.electron.starting_time_e), rtol=0.0, atol=1.0e-18)
     if not np.any(mask):
         return
     x0, y0 = _infer_initial_xy(cfg)
@@ -378,6 +378,14 @@ def _apply_instantaneous_anchor(cfg: MainConfig, t: np.ndarray, x: np.ndarray, y
     y[mask] = float(y0)
     z[mask] = float(z0)
 
+def hold_track_end(cfg: MainConfig, a:np.ndarray, t_new:np.ndarray):
+    t_end = cfg.electron.starting_time_e + cfg.electron.track_length_e
+    i_end = np.searchsorted(t_new, t_end, side="right")
+    if a is None or np.ndim(a) == 0 or i_end >= len(a):
+        return a
+    a = np.array(a, copy=True)
+    a[i_end:] = a[i_end - 1]
+    return a
 
 # -----------------------------------------------------------------------------
 # Initial-condition helpers
@@ -704,12 +712,11 @@ def build_dynamic_track(
     field: FieldMap,
     mode_map: ModeMap,
     resonance: ResonanceCurve,
-    electron_cfg: ElectronConfig,
 ) -> DynamicTrack:
     sim = cfg.simulation
     feat = cfg.features
     dyn = cfg.dynamics
-    elec = electron_cfg
+    elec = cfg.electron
 
     #JK: Old, now unused r,phi at t=0 calculation
     #t0 = float(elec.starting_time_e)
@@ -722,8 +729,8 @@ def build_dynamic_track(
     #B0 = float(field.B(float(r0_m), float(z0_m)))
     const.configure_constants(cfg.physics.constants_preset)
 
-    t0 = float(sim.starting_time_s)
-    Tdur = float(sim.track_length_s)
+    t0 = float(elec.starting_time_e)
+    Tdur = float(elec.track_length_e)
 
     init = _resolve_initial_orbit_state(cfg, field)
     r0_m = float(init.r_gc0_m)
@@ -998,7 +1005,6 @@ def build_dynamic_track(
     E_eV = np.asarray(E_eV, dtype=float)
     mu_t = np.asarray(mu_t, dtype=float)
     cavity_energy_t = np.asarray(cavity_energy_t, dtype=float)
-
     r_gc = np.asarray(axial_profile.r_at_z(z_gc), dtype=float)
     B_gc = np.asarray(axial_profile.B(z_gc), dtype=float)
     Br_gc, Bphi_gc, Bz_gc = axial_profile.components(z_gc)
@@ -1086,7 +1092,7 @@ def build_dynamic_track(
         y = y_gc + delta[:, 1]
         z = z_gc + delta[:, 2]
         _apply_instantaneous_anchor(cfg, t, x, y, z)
-
+        
         if feat.include_true_orbit and phase_reference == "instantaneous":
             r_true = np.hypot(x, y)
             z_true = z
@@ -1150,7 +1156,7 @@ def build_dynamic_track(
     vx = vx_gc + v_cyc[:, 0]
     vy = vy_gc + v_cyc[:, 1]
     vz = vz_gc + v_cyc[:, 2]
-
+    
     return DynamicTrack(
         t=t,
         x=x,
@@ -1246,7 +1252,7 @@ def sample_dynamic_track(
 
     def rs(y: np.ndarray) -> np.ndarray:
         return resample_linear(track.t, y, t_new)
-
+    
     z_gc = rs(track.z_gc)
     parallel_sign = _step_resample(track.t, track.parallel_sign, t_new)
     energy_eV = np.maximum(rs(track.energy_eV), 0.0)
@@ -1406,28 +1412,28 @@ def sample_dynamic_track(
 
     return DynamicTrack(
         t=t_new,
-        x=x,
-        y=y,
-        z=z_true,
-        vx=vx_gc + v_cyc[:, 0],
-        vy=vy_gc + v_cyc[:, 1],
-        vz=vz_gc + v_cyc[:, 2],
-        x_gc=x_gc,
-        y_gc=y_gc,
-        z_gc=z_gc,
-        vx_gc=vx_gc,
-        vy_gc=vy_gc,
-        vz_gc=vz_gc,
-        r_gc_m=r_gc,
-        phi_gc_rad=phi_gc,
-        parallel_sign=parallel_sign,
-        b_cross_kappa_phi_per_m=b_cross_kappa_phi,
-        f_c_hz=f_c,
-        amp=amp,
-        phase_rf=phase_rf,
-        B_T=np.asarray(B_T, dtype=float),
-        energy_eV=energy_eV,
-        mu_J_per_T=mu_t,
+        x=hold_track_end(cfg, x, t_new),
+        y=hold_track_end(cfg, y, t_new),
+        z=hold_track_end(cfg, z_true, t_new),
+        vx=hold_track_end(cfg, vx_gc + v_cyc[:, 0], t_new),
+        vy=hold_track_end(cfg, vy_gc + v_cyc[:, 1], t_new),
+        vz=hold_track_end(cfg, vz_gc + v_cyc[:, 2], t_new),
+        x_gc=hold_track_end(cfg, x_gc, t_new),
+        y_gc=hold_track_end(cfg, y_gc, t_new),
+        z_gc=hold_track_end(cfg, z_gc, t_new),
+        vx_gc=hold_track_end(cfg, vx_gc, t_new),
+        vy_gc=hold_track_end(cfg, vy_gc, t_new),
+        vz_gc=hold_track_end(cfg, vz_gc, t_new),
+        r_gc_m=hold_track_end(cfg, r_gc, t_new),
+        phi_gc_rad=hold_track_end(cfg, phi_gc, t_new),
+        parallel_sign=hold_track_end(cfg, parallel_sign, t_new),
+        b_cross_kappa_phi_per_m=hold_track_end(cfg, b_cross_kappa_phi, t_new),
+        f_c_hz=hold_track_end(cfg, f_c, t_new),
+        amp=hold_track_end(cfg, amp, t_new),
+        phase_rf=hold_track_end(cfg, phase_rf, t_new),
+        B_T=hold_track_end(cfg, np.asarray(B_T, dtype=float), t_new),
+        energy_eV=hold_track_end(cfg, energy_eV, t_new),
+        mu_J_per_T=hold_track_end(cfg, mu_t, t_new),
         axial_profile=axial_profile,
         cavity_energy_J=cavity_energy_sampled,
         cavity_power_W=cavity_output_power,

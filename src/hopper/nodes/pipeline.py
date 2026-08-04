@@ -23,17 +23,11 @@ from .resonance_node import ResonanceNode
 from .dynamics_node import DynamicsNode
 from .signal_node import SignalNode
 from .output_node import OutputNode
-
-def build_config(base_cfg: MainConfig, electrons: dict[int, dict]) -> MainConfig:
-    cfg = deepcopy(base_cfg)
-    cfg.electrons = { eid: ElectronConfig(**edata) for eid, edata in electrons.items() }
-    return cfg
     
 
-def run_pipeline_scriptable(config_path: str | Path, electrons: dict[int, dict]) -> Dict[str, Any]:
+def run_pipeline_scriptable(config_path: str | Path) -> Dict[str, Any]:
     
     cfg = load_config(config_path)
-    cfg = build_config(cfg, electrons)
     ctx: Dict[str, Any] = {"cfg": cfg}
     nodes = [
         TrapNode(cfg),
@@ -49,11 +43,13 @@ def run_pipeline_scriptable(config_path: str | Path, electrons: dict[int, dict])
     config = ctx["cfg"]
     signal = ctx["signal_result"]
     signal_dict = ctx["individual_signals"]
+    drives_dict = ctx["individual_drives"]
     # The latter two are to intercept the dynamics at different stages in the processing
     track_if = ctx["signal_result"].track_if
-    track_dyn = ctx["track_dyn"]
+    tracks_dyn = ctx["track_dyns"]
+    tracks_dyn_sampled = ctx["track_dyns_sampled"]
     field = ctx["field"]
-    return config, signal, signal_dict, track_if, track_dyn, field
+    return config, signal, signal_dict, drives_dict, tracks_dyn_sampled, tracks_dyn, field
 
 def _default_log_path(cfg: MainConfig) -> Path:
     if cfg.output.log_file:
@@ -68,7 +64,7 @@ def run_pipeline(cfg: MainConfig) -> Dict[str, Any]:
     profiler.add_note(
         "config",
         constants_preset=cfg.physics.constants_preset,
-        track_length_s=float(cfg.simulation.track_length_s),
+        duration_s=float(cfg.simulation.duration_s),
         starting_time_s=float(cfg.simulation.starting_time_s),
         n_tracks=len(cfg.tracks) if cfg.tracks else 1,
         axial_strategy=cfg.dynamics.axial_strategy,

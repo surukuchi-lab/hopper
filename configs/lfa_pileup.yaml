@@ -1,13 +1,64 @@
-simulation:
-  n_pileup: 3
-  starting_time_s: 0
-  track_length_s: 5.e-5
+physics:
+  constants_preset: pdg_2022              # pdg_2022 OR pdg_2021 OR locust_kassiopeia_2021 OR locust_kassiopeia_2006
 
+simulation:
+  starting_time_s: 0
+  duration_s: 2e-6
+
+electron:
+  position_reference: guiding_center   # guiding_center OR instantaneous
+  position_coordinates: cylindrical    # auto OR cylindrical OR cartesian
+  energy_eV: 18563.251
+  pitch_angle_deg: 89.0
+  r0_m: 0.16
+  phi0_rad: 0.0
+  z0_m: 0.0
+  vpar_sign: 1
+  cyclotron_phase0_rad: 0.0         # initial gyrophase; for guiding_center starts this selects the initial orbit point around the configured guiding center
+
+# Optional pileup tracks. If omitted or empty, the single electron block above is used.
+tracks: 
+
+- position_reference: guiding_center   # guiding_center OR instantaneous
+  position_coordinates: cylindrical    # auto OR cylindrical OR cartesian
+  energy_eV: 18563.251
+  pitch_angle_deg: 89
+  r0_m: 0.16
+  phi0_rad: 0.0
+  z0_m: 0.0
+  vpar_sign: 1
+  starting_time_e: 0.0
+  track_length_e: 2.e-7
+  cyclotron_phase0_rad: 0.0         
+
+- position_reference: guiding_center   # guiding_center OR instantaneous
+  position_coordinates: cylindrical    # auto OR cylindrical OR cartesian
+  energy_eV: 18563.251
+  pitch_angle_deg: 89
+  r0_m: 0.16
+  phi0_rad: 0.0
+  z0_m: 0.0
+  vpar_sign: 1
+  starting_time_e: 5.e-7
+  track_length_e: 2.e-7
+  cyclotron_phase0_rad: 0.0         
+
+- position_reference: guiding_center   # guiding_center OR instantaneous
+  position_coordinates: cylindrical    # auto OR cylindrical OR cartesian
+  energy_eV: 18563.251
+  pitch_angle_deg: 89
+  r0_m: 0.16
+  phi0_rad: 0.0
+  z0_m: 0.0
+  vpar_sign: 1
+  starting_time_e: 1.e-6
+  track_length_e: 2.e-7
+  cyclotron_phase0_rad: 0.0         
+  
 features:
   include_true_orbit: true
   include_gradB: true
   include_resonance: false
-  write_root: false
   amplitude_mode: sqrtP
   normalize_amp_at_t0: false
 
@@ -35,7 +86,7 @@ mode_map:
   type: analytic_te011
 
 resonance:
-  root_file: /home/jankup/p8_software/hopper/resources/UnitTestOutput.root
+  resonance_curve: /home/jankup/p8_software/hopper/resources/UnitTestOutput.root
   object_name: cavityHisto
   normalize_to_peak: true
 
@@ -55,7 +106,6 @@ dynamics:
 
   time_step_strategy: axial_adaptive      # axial_adaptive OR phase_bounded OR phase_uniform
   samples_per_cyclotron_turn: 15      # set integer to enable
-  max_internal_points: 2000000
 
 signal:
   lo_hz: 0 #563.e6
@@ -66,7 +116,31 @@ signal:
   if_filter_order: 8
   if_filter_cutoff_ratio: 0.9
   normalize_power: false
-  save_ind_signals: true # Saving individual signals (npileup * up to 2e6 entries) gives us RAM headaches, so this should not be switched on carelessly
+  #save_ind_signals: true # Saving individual signals (npileup * up to 2e6 entries) gives us RAM headaches, so this should not be switched on carelessly
+
+readout:
+  model: locust_like_baseband          # none OR locust_exact_baseband OR locust_like_baseband
+  require_analytic_baseband_drive: true
+  fast_decimation_factor: 1
+  store_fast_iq: false
+  chunk_size: 2000000
+  lpf:
+    type: none                          # production fast path; use fft_brickwall with fast_decimation_factor=10 for exact Locust emulation
+    cutoff_ratio_of_final_nyquist: 0.85
+    n_windows: 80
+  noise:
+    enabled: false
+    noise_floor_psd_W_per_Hz: 70.0e-23
+    impedance_ohm: 50.0
+    seed: null
+  digitizer:
+    enabled: false
+    bit_depth: 8
+    data_type_size: 1
+    signed: false
+    v_range: 1.0
+    v_offset: 0.0
+    strict_range: true
 
 output:
   out_dir: /home/jankup/p8_software/hopper/cres-signal-sim/outputs
