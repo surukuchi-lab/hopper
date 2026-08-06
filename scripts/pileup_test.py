@@ -10,12 +10,19 @@ plt.style.use("ibm")
 
 f_c_prior = 560334450
 
-plot_ds = 10
+plot_ds = 1
 start = time.perf_counter()
 cfg = pipe.load_config("../configs/lfa_pileup.yaml")
-meta, signal, signal_dict, drives_dict, tracks, field = pipe.run_pipeline_scriptable(cfg)
+ctx= pipe.run_pipeline_scriptable(cfg)
 end = time.perf_counter()
 print(f"run_pipeline_scriptable timing benchmark is {end - start:.6f} s")
+
+meta = ctx["cfg"] 
+signal = ctx["signal_result"] 
+signal_dict = ctx["individual_signals"]
+drives_dict = ctx["individual_drives"]
+tracks = ctx["track_dyns"]
+field = ctx["field"] 
 
 output = {"meta": meta, "signal": signal, "signal_dict": signal_dict}
 np.savez('integration_no_ringup', output)

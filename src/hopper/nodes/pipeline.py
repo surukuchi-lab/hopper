@@ -25,9 +25,8 @@ from .signal_node import SignalNode
 from .output_node import OutputNode
     
 
-def run_pipeline_scriptable(config_path: str | Path) -> Dict[str, Any]:
+def run_pipeline_scriptable(cfg: MainConfig) -> Dict[str, Any]:
     
-    cfg = load_config(config_path)
     ctx: Dict[str, Any] = {"cfg": cfg}
     nodes = [
         TrapNode(cfg),
@@ -40,15 +39,18 @@ def run_pipeline_scriptable(config_path: str | Path) -> Dict[str, Any]:
     for node in nodes:
         ctx = node.run(ctx)
 
+    """
+    These properties are typically accessed in the end
     config = ctx["cfg"]
     signal = ctx["signal_result"]
     signal_dict = ctx["individual_signals"]
     drives_dict = ctx["individual_drives"]
-    # The latter two are to intercept the dynamics at different stages in the processing
     track_if = ctx["signal_result"].track_if
     tracks_dyn = ctx["track_dyns"]
+    tracks_sampled = ctx["track_sampled"]
     field = ctx["field"]
-    return config, signal, signal_dict, drives_dict, tracks_dyn, field
+    """
+    return ctx 
 
 def _default_log_path(cfg: MainConfig) -> Path:
     if cfg.output.log_file:

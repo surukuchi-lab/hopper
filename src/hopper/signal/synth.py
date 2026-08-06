@@ -342,8 +342,6 @@ def synthesize_iq_pileup(
     tracks = list(tracks_dyn)
     if not tracks:
         raise ValueError("at least one DynamicTrack is required for pileup synthesis")
-    if len(tracks) == 1:
-        return synthesize_iq(cfg, tracks[0], field=field, mode_map=mode_map, resonance=resonance), tracks[0], None
     if str(getattr(cfg.readout, "model", "none")) not in {"locust_exact_baseband", "locust_like_baseband"}:
         raise ValueError("multi-track pileup currently requires readout.model='locust_exact_baseband' or 'locust_like_baseband'")
     if not cavity_complex_response_enabled(cfg):
@@ -366,6 +364,7 @@ def synthesize_iq_pileup(
     for idx, track in enumerate(tracks):
         cfg_i = replace(cfg, electron=electron_cfgs[idx])
         sampled = sample_dynamic_track(cfg_i, track, field=field, mode_map=mode_map, resonance=resonance, t_new=t_fast)
+        ind_sampled[idx] = sampled
         drive_ind = cavity_baseband_drive(cfg_i, sampled, field=field, mode_map=mode_map, f_lo_hz=f_lo)
         drive_total += drive_ind
         if cfg.signal.save_ind_signals:
@@ -464,9 +463,9 @@ def synthesize_iq_pileup(
         print(f"[SIGN]: Readout chain for Signal {idx} processed")
     #The total signal always comes last here. Individual signals might not even be defined, so in case save_ind_signals is not enabled, only the total is returned
     if cfg.signal.save_ind_signals:
-        return ind_signals["total"], ind_signals, ind_drives
+        return ind_signals["total"], ind_signals, ind_drives, ind_sampled
     else:
-        return ind_signals["total"], ind_signals["total"], ind_drives["total"]
+        return ind_signals["total"], ind_signals["total"], ind_drives["total"], None
 
 def synthesize_iq(
     cfg: MainConfig,
