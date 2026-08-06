@@ -331,7 +331,7 @@ def synthesize_iq_pileup(
     field: FieldMap,
     mode_map: ModeMap,
     resonance: ResonanceCurve,
-) -> SignalResult:
+) -> tuple(SignalResult, dict, dict):
     """Generate a coherent shared-cavity pileup signal from multiple tracks.
 
     Each electron contributes a complex analytic baseband drive d_j(t).  The drives
@@ -343,7 +343,7 @@ def synthesize_iq_pileup(
     if not tracks:
         raise ValueError("at least one DynamicTrack is required for pileup synthesis")
     if len(tracks) == 1:
-        return synthesize_iq(cfg, tracks[0], field=field, mode_map=mode_map, resonance=resonance)
+        return synthesize_iq(cfg, tracks[0], field=field, mode_map=mode_map, resonance=resonance), tracks[0], None
     if str(getattr(cfg.readout, "model", "none")) not in {"locust_exact_baseband", "locust_like_baseband"}:
         raise ValueError("multi-track pileup currently requires readout.model='locust_exact_baseband' or 'locust_like_baseband'")
     if not cavity_complex_response_enabled(cfg):
@@ -354,11 +354,18 @@ def synthesize_iq_pileup(
     drive_total = np.zeros(t_fast.size, dtype=np.complex128)
     ind_drives = {}
     max_fc_offset_hz = 0.0
-    electron_cfgs = list(cfg.tracks) if cfg.tracks else [cfg.electron]
+    electron_cfgs = None
+    print("Signal")
+    if(len(cfg.tracks) >= 1):
+        print(f"[SIGN]: Track Configuration Tree used, length of tracks array is {len(cfg.tracks)}")
+        electron_cfgs = list(cfg.tracks) 
+    else:    
+        print(f"[SIGN]: Electron Tree used, track array is {len(cfg.tracks)} elements long")
+        electron_cfgs = [cfg.electron]
+
     ind_sampled = {}
     for idx, track in enumerate(tracks):
         cfg_i = replace(cfg, electron=electron_cfgs[idx])
-        print("pileup signal function:", track.t[0], track.t[-1]);
         sampled = sample_dynamic_track(cfg_i, track, field=field, mode_map=mode_map, resonance=resonance, t_new=t_fast)
         drive_ind = cavity_baseband_drive(cfg_i, sampled, field=field, mode_map=mode_map, f_lo_hz=f_lo)
         drive_total += drive_ind
@@ -414,9 +421,8 @@ def synthesize_iq_pileup(
 
         if idx == "total":
             track_if = sample_dynamic_track(cfg, tracks[0], field=field, mode_map=mode_map, resonance=resonance, t_new=readout_res.t)
-        else:
+        else: 
             cfg_i = replace(cfg, electron=electron_cfgs[idx])
-            print("pileup signal function:", tracks[idx].t[0], tracks[idx].t[-1]);
             track_if = sample_dynamic_track(cfg_i, tracks[idx], field=field, mode_map=mode_map, resonance=resonance, t_new=readout_res.t)
         drive_if = np.interp(readout_res.t, t_fast, np.real(drive)) + 1j * np.interp(readout_res.t, t_fast, np.imag(drive))
         amp_if = np.interp(readout_res.t, t_fast, np.real(amp_state)) + 1j * np.interp(readout_res.t, t_fast, np.imag(amp_state))
@@ -456,11 +462,12 @@ def synthesize_iq_pileup(
             readout_meta=readout_meta,
             amplitude_normalization=1.0,
         )
+        print(f"[SIGN]: Readout chain for Signal {idx} processed")
     #The total signal always comes last here. Individual signals might not even be defined, so in case save_ind_signals is not enabled, only the total is returned
     if cfg.signal.save_ind_signals:
-        return ind_signals["total"], ind_signals, ind_drives, ind_sampled
+        return ind_signals["total"], ind_signals, ind_drives
     else:
-        return ind_signals["total"], None, None, None
+        return ind_signals["total"], ind_signals["total"], ind_drives["total"]
 
 def synthesize_iq(
     cfg: MainConfig,
@@ -486,7 +493,7 @@ def synthesize_iq(
     M = int(sig.if_decim)
     if M < 1:
         raise ValueError("signal.if_decim must be >= 1")
-
+    print("[NSIG]: Synthesizing single electron")
     if str(getattr(cfg.readout, "model", "none")) in {"locust_exact_baseband", "locust_like_baseband"}:
         if not bool(getattr(cfg.readout, "require_analytic_baseband_drive", True)):
             raise ValueError("Locust-style readout requires analytic baseband drive generation")

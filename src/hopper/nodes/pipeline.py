@@ -47,9 +47,8 @@ def run_pipeline_scriptable(config_path: str | Path) -> Dict[str, Any]:
     # The latter two are to intercept the dynamics at different stages in the processing
     track_if = ctx["signal_result"].track_if
     tracks_dyn = ctx["track_dyns"]
-    tracks_dyn_sampled = ctx["track_dyns_sampled"]
     field = ctx["field"]
-    return config, signal, signal_dict, drives_dict, tracks_dyn_sampled, tracks_dyn, field
+    return config, signal, signal_dict, drives_dict, tracks_dyn, field
 
 def _default_log_path(cfg: MainConfig) -> Path:
     if cfg.output.log_file:

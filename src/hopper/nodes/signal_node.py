@@ -26,10 +26,9 @@ class SignalNode:
         mode_map = ctx["mode_map"]
         resonance = ctx.get("resonance_curve")
         profiler = ctx.get("profiler")
-
         if profiler is not None:
             with profiler.step("signal.synthesize", n_tracks=len(tracks_dyn), readout_model=self.cfg.readout.model):
-                sig_res = synthesize_iq_pileup(self.cfg, tracks_dyn, field=field, mode_map=mode_map, resonance=resonance)
+                sig_res, ind_signals, ind_drives = synthesize_iq_pileup(self.cfg, tracks_dyn, field=field, mode_map=mode_map, resonance=resonance)
             profiler.add_note(
                 "signal",
                 readout_model=str(self.cfg.readout.model),
@@ -46,11 +45,10 @@ class SignalNode:
                 mode_map_counters_after_signal=(mode_map.counter_snapshot() if hasattr(mode_map, "counter_snapshot") else {}),
             )
         else:
-            sig_res, ind_signals, ind_drives, sampled = synthesize_iq_pileup(self.cfg, tracks_dyn, field=field, mode_map=mode_map, resonance=resonance)
+            sig_res, ind_signals, ind_drives = synthesize_iq_pileup(self.cfg, tracks_dyn, field=field, mode_map=mode_map, resonance=resonance)
 
         ctx = dict(ctx)
         ctx["individual_signals"] = ind_signals
-        ctx["track_dyns_sampled"] = sampled
         ctx["individual_drives"] = ind_drives
         ctx["signal_result"] = sig_res
         return ctx

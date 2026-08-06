@@ -28,25 +28,16 @@ class DynamicsNode:
         field = ctx["field"]
         mode_map = ctx["mode_map"]
         resonance = ctx.get("resonance_curve", ResonanceCurve.unity())
-        # JK: Individual track processing loop of feature/pileup_integration
-        #tracks = {}
-    
-        #for idx, electron_cfg in self.cfg.active_electrons():
-        #    track_dyn = build_dynamic_track(
-        #        self.cfg,
-        #        field=field,
-        #        mode_map=mode_map,
-        #        resonance=resonance,
-        #        electron_cfg=electron_cfg,   # falls build_dynamic_track das unterstützt
-        #    )
-        #    tracks[idx] = track_dyn
-        #    print(f"[NDYN]: Electron {idx} processed")
-    
-        #ctx = dict(ctx)
-        #ctx["track_dyn"] = tracks
         profiler = ctx.get("profiler")
 
-        electron_cfgs = list(self.cfg.tracks) if self.cfg.tracks else [self.cfg.electron]
+        # Fallback to electron tree if tracks are empty
+        electron_cfgs = None
+        if(len(self.cfg.tracks) >= 1):
+            print(f"[NDYN]: Track Configuration Tree used, length of tracks array is {len(self.cfg.tracks)}")
+            electron_cfgs = list(self.cfg.tracks) 
+        else:    
+            print(f"[NDYN]: Electron Tree used, track array is {len(self.cfg.tracks)} elements long")
+            electron_cfgs = [self.cfg.electron]
         tracks = []
         for idx, electron_cfg in enumerate(electron_cfgs):
             cfg_i = replace(self.cfg, electron=electron_cfg)
@@ -70,7 +61,7 @@ class DynamicsNode:
             else:
                 track = build_dynamic_track(cfg_i, field=field, mode_map=mode_map, resonance=resonance)
             tracks.append(track)
-
+            print(f"[NDYN]: Electron {idx} processed")
         ctx = dict(ctx)
         ctx["track_dyns"] = tracks
         ctx["track_dyn"] = tracks[0]
