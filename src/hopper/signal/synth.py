@@ -355,7 +355,6 @@ def synthesize_iq_pileup(
     ind_drives = {}
     max_fc_offset_hz = 0.0
     electron_cfgs = None
-    print("Signal")
     if(len(cfg.tracks) >= 1):
         print(f"[SIGN]: Track Configuration Tree used, length of tracks array is {len(cfg.tracks)}")
         electron_cfgs = list(cfg.tracks) 
