@@ -56,9 +56,10 @@ def gradB_drift_vphi(
         Br = np.asarray(Br_T, float)
         Bz = np.asarray(Bz_T, float)
 
-    # ``gamma`` is intentionally unused here; see the docstring above.
+    relativistic_kass_factor = 2.0 * gamma / (1.0 + gamma)
+    
     cross_phi = Bz * dBdr - Br * dBdz
-    vphi = mu * cross_phi / (float(q_C) * (Bmag * Bmag + 1e-300))
+    vphi = relativistic_kass_factor * mu * cross_phi / (float(q_C) * (Bmag * Bmag + 1e-300))
     return np.asarray(vphi, dtype=float)
 
 
