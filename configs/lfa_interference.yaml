@@ -1,0 +1,136 @@
+physics:
+  constants_preset: pdg_2022              # pdg_2022 OR pdg_2021 OR locust_kassiopeia_2021 OR locust_kassiopeia_2006
+
+simulation:
+  starting_time_s: 0
+  duration_s: 1e-5
+
+electron:
+  position_reference: guiding_center   # guiding_center OR instantaneous
+  position_coordinates: cylindrical    # auto OR cylindrical OR cartesian
+  energy_eV: 18563.251
+  pitch_angle_deg: 89.0
+  r0_m: 0.16
+  phi0_rad: 0.0
+  z0_m: 0.0
+  vpar_sign: 1
+  track_length_e: 6.e-6
+  cyclotron_phase0_rad: 0.0         # initial gyrophase; for guiding_center starts this selects the initial orbit point around the configured guiding center
+
+tracks:
+- position_reference: guiding_center   # guiding_center OR instantaneous
+  position_coordinates: cylindrical    # auto OR cylindrical OR cartesian
+  energy_eV: 18563.251
+  pitch_angle_deg: 89.8
+  r0_m: 0.16
+  phi0_rad: 0.0
+  z0_m: 0.0
+  vpar_sign: 1
+  starting_time_e: 0.0
+  track_length_e: 1.e-5
+  cyclotron_phase0_rad: 0.0         
+
+- position_reference: guiding_center   # guiding_center OR instantaneous
+  position_coordinates: cylindrical    # auto OR cylindrical OR cartesian
+  energy_eV: 18563.251
+  pitch_angle_deg: 89.8
+  r0_m: 0.16
+  phi0_rad: 0.0
+  z0_m: 0.0
+  vpar_sign: 1
+  starting_time_e: 0.0
+  track_length_e: 1.e-5
+  cyclotron_phase0_rad: 0.0         
+  
+features:
+  include_true_orbit: true
+  include_gradB: true
+  include_resonance: false
+  amplitude_mode: sqrtP
+  normalize_amp_at_t0: false
+
+trap:
+  field_map_npz: /home/jankup/p8_software/hopper/resources/field_map_rz_components.npz
+  coil_xml: null
+  generate_if_missing: false
+  placeholder_if_missing: false
+  interpolation: bilinear
+  clamp_to_grid: true
+  grid:
+    r_max_m: 0.327
+    z_min_m: -2.0
+    z_max_m: 2.0
+    n_r: 201
+    n_z: 801
+
+cavity:
+  radius_m: 0.327
+  length_m: 4.0
+  f0_hz: 560.3e6
+  Q: 500
+
+mode_map:
+  type: analytic_te011
+
+resonance:
+  resonance_curve: /home/jankup/p8_software/hopper/resources/UnitTestOutput.root
+  object_name: cavityHisto
+  normalize_to_peak: true
+
+dynamics:
+  dt_max_s: 5e-10
+  dt_min_s: 1e-12
+  safety: 0.98
+  v_turn_threshold_c: 1e-5
+
+  axial_strategy: template_tiling         # direct OR template_tiling
+  template_build: mirror               # integrate OR mirror
+
+  energy_loss_model: per_bounce           # none OR per_bounce OR linear_fit
+  energy_loss_scale: 1.0
+  energy_floor_eV: 1000.0
+  energy_loss_fit_bounces: 6
+
+  time_step_strategy: axial_adaptive      # axial_adaptive OR phase_bounded OR phase_uniform
+  samples_per_cyclotron_turn: 15      # set integer to enable
+
+signal:
+  lo_hz: 0 #563.e6
+  fs_if_hz: 10e9
+  if_decim: 1
+  fs_hz: null
+  if_antialias_filter: false
+  if_filter_order: 8
+  if_filter_cutoff_ratio: 0.9
+  normalize_power: false
+  save_ind_signals: true # Saving individual signals (npileup * up to 2e6 entries) gives us RAM headaches, so this should not be switched on carelessly
+
+readout:
+  model: locust_like_baseband          # none OR locust_exact_baseband OR locust_like_baseband
+  require_analytic_baseband_drive: true
+  fast_decimation_factor: 1
+  store_fast_iq: false
+  chunk_size: 2000000
+  lpf:
+    type: none                          # production fast path; use fft_brickwall with fast_decimation_factor=10 for exact Locust emulation
+    cutoff_ratio_of_final_nyquist: 0.85
+    n_windows: 80
+  noise:
+    enabled: false
+    noise_floor_psd_W_per_Hz: 70.0e-23
+    impedance_ohm: 50.0
+    seed: null
+  digitizer:
+    enabled: false
+    bit_depth: 8
+    data_type_size: 1
+    signed: false
+    v_range: 1.0
+    v_offset: 0.0
+    strict_range: true
+
+output:
+  out_dir: /home/jankup/p8_software/hopper/cres-signal-sim/outputs
+  basename: sim_001_89deg_18563_251eV_16cm
+  write_npz: true
+  write_root: true
