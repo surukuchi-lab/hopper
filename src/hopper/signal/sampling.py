@@ -98,7 +98,6 @@ def rf_time_grid_spec(cfg: MainConfig, track: DynamicTrack) -> TimeGridSpec:
     - phase_uniform: sample exactly every 2π / samples_per_cyclotron_turn in
       accumulated cyclotron phase. The resulting time grid is non-uniform.
     """
-    # JK: TEMPORARY
     t0 = float(cfg.simulation.starting_time_s)
     duration = float(cfg.simulation.duration_s)
     t_end = t0 + duration

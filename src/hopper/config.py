@@ -9,7 +9,7 @@ Defines typed configuration models, default values, semantic validation, and YAM
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Dict, Literal, Optional
 
@@ -565,6 +565,14 @@ def _validate_semantic_compatibility(cfg: MainConfig, raw_data: Dict[str, Any]) 
     for i, trk in enumerate(cfg.tracks):
         if trk.vpar_sign not in {-1, 1}:
             raise ValueError(f"tracks[{i}].vpar_sign must be +1 or -1")
+            sim = self.simulation
+            # Electron track length specification requires double check with the simulation time
+            if trk.starting_time_e + trk.track_length_e > sim.starting_time_s + sim.duration_s:
+                el_length = trk.track_length_e
+                overhead = trk.starting_time_e + trk.track_length_e - (sim.starting_time_s + sim.duration_s)
+                print(f"[CFG]: Electron {i} is configured to be longer than simulation (duration {sim.duration_s:.2e}), cutting its track length by {overhead}")
+                trk.track_length_e = replace(trk, el_length - overhead)
+    
     if cfg.campaign.enabled and int(cfg.campaign.slurm_cpus_per_task) < 1:
         raise ValueError("campaign.slurm_cpus_per_task must be >= 1")
 
