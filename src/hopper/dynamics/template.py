@@ -766,7 +766,10 @@ def tile_bounce_template_constant_energy(
     z_list: list[np.ndarray] = []
     v_list: list[np.ndarray] = []
 
+    t_turns = []
+
     for i in range(n):
+        t_turns_list.append(float(t0_s))
         t_seg = float(t0_s) + tpl.t_rel_s + i * T
         z_seg = tpl.z_m
         v_seg = tpl.vpar_ref_m_per_s
@@ -797,7 +800,7 @@ def tile_bounce_template_constant_energy(
         z = np.concatenate([z, np.asarray([z_end], dtype=float)])
         v = np.concatenate([v, np.asarray([v_end], dtype=float)])
 
-    return t, z, v
+    return t, z, v, t_turns
 
 
 def tile_bounce_template_linear_energy(
@@ -854,7 +857,10 @@ def tile_bounce_template_linear_energy(
     t_cursor = t0
     first = True
 
+    t_turns = []
+
     while t_cursor < t_end - 1e-18:
+        t_turns.append(t_cursor)
         # Evaluate energy at the start of this bounce to set the time-stretch.
         E_start = float(np.asarray(energy_at_time(t_cursor)).reshape(()))
         _, _, v_start = gamma_beta_v_from_kinetic(E_start)
@@ -906,10 +912,9 @@ def tile_bounce_template_linear_energy(
 
         # Advance by one (scaled) bounce period
         t_cursor = t_cursor + scale_t * T_ref
-
     t = np.concatenate(t_out) if len(t_out) else np.array([], dtype=float)
     z = np.concatenate(z_out) if len(z_out) else np.array([], dtype=float)
     v = np.concatenate(v_out) if len(v_out) else np.array([], dtype=float)
     E = np.concatenate(E_out) if len(E_out) else np.array([], dtype=float)
 
-    return t, z, v, E
+    return t, z, v, E, t_turns

@@ -80,13 +80,16 @@ class DynamicTrack:
     phi_gc_rad: np.ndarray
     parallel_sign: np.ndarray
     b_cross_kappa_phi_per_m: np.ndarray
-
+    
     f_c_hz: np.ndarray
     amp: np.ndarray
     phase_rf: np.ndarray
     B_T: np.ndarray
     energy_eV: np.ndarray
     mu_J_per_T: np.ndarray
+    
+    t_turns: np.ndarray | None = None #Time points marking the turning points
+    
     axial_profile: AxialFieldProfile | None = None
     cavity_energy_J: np.ndarray | None = None
     cavity_power_W: np.ndarray | None = None
@@ -95,7 +98,7 @@ class DynamicTrack:
     cavity_amplitude_sqrt_J: np.ndarray | None = None
     cavity_drive_sqrt_J_per_s: np.ndarray | None = None
     solver_info: dict[str, Any] | None = None
-
+    
 
 #def _infer_r_phi_from_xy(e: ElectronConfig) -> Tuple[float, float]:
 #    if e.x0_m is None or e.y0_m is None:
@@ -792,6 +795,8 @@ def build_dynamic_track(
         solver_info["cyclotron_frequency_reference"],
         solver_info["constants_preset"],
     )
+    
+    t_turns = []
 
     if axial_strategy == "direct":
         if energy_loss_model == "none":
@@ -918,7 +923,7 @@ def build_dynamic_track(
             if getattr(tpl, "period_rel_error_estimate", None) is not None:
                 solver_info["template_period_rel_error_estimate"] = float(tpl.period_rel_error_estimate)
             if energy_loss_model == "none":
-                t_s, z_gc_m, vz_gc_m_per_s = tile_bounce_template_constant_energy(tpl, t0_s=t0, duration_s=Tdur)
+                t_s, z_gc_m, vz_gc_m_per_s, t_turns = tile_bounce_template_constant_energy(tpl, t0_s=t0, duration_s=Tdur)
                 E_eV = np.full_like(t_s, E0, dtype=float)
                 mu_t = np.full_like(t_s, mu0, dtype=float)
                 cavity_energy_t = np.full_like(t_s, cavity_energy0, dtype=float)
@@ -956,7 +961,7 @@ def build_dynamic_track(
                     include_curvature_drift=bool(getattr(feat, "include_curvature_drift", False)),
                     stats=radiation_stats,
                 )
-                t_s, z_gc_m, vz_gc_m_per_s, E_eV = tile_bounce_template_linear_energy(
+                t_s, z_gc_m, vz_gc_m_per_s, E_eV, t_turns = tile_bounce_template_linear_energy(
                     tpl,
                     t0_s=t0,
                     duration_s=Tdur,
@@ -1181,6 +1186,7 @@ def build_dynamic_track(
         B_T=np.asarray(B_T, dtype=float),
         energy_eV=E_eV,
         mu_J_per_T=mu_t,
+        t_turns=t_turns,
         axial_profile=axial_profile,
         cavity_energy_J=cavity_energy_t,
         cavity_power_W=cavity_output_power,
@@ -1242,6 +1248,7 @@ def sample_dynamic_track(
             B_T=empty,
             energy_eV=empty,
             mu_J_per_T=empty,
+            t_turns=empty,
             axial_profile=track.axial_profile,
         )
 
@@ -1434,6 +1441,7 @@ def sample_dynamic_track(
         B_T=hold_track_end(cfg, np.asarray(B_T, dtype=float), t_new),
         energy_eV=hold_track_end(cfg, energy_eV, t_new),
         mu_J_per_T=hold_track_end(cfg, mu_t, t_new),
+        t_turns=track.t_turns, #Just pipe t_turns through
         axial_profile=axial_profile,
         cavity_energy_J=cavity_energy_sampled,
         cavity_power_W=cavity_output_power,

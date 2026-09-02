@@ -127,6 +127,11 @@ class AxialSolver:
         z_list = [z]
         v_list = [vpar0]
         hit_turning = False
+        print(f"[SLVR]: Minimum Stepping parameter is {self.dt_min_s:.2e}")
+        print(f"[SLVR]: Maximum Stepping parameter is {self.dt_max_s:.2e}")
+        print(f"[SLVR]: Stepping is adjusted starting ")
+        print(f"        at Velocities lower than {self.v_turn_threshold_c*c0:.2e},")
+        print(f"        resulting in {self.safety * self.dt_max_s}")
 
         for _ in range(self.max_steps):
             t = t_list[-1]
